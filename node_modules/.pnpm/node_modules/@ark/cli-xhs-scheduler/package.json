@@ -1,0 +1,21 @@
+{
+  "name": "@ark/cli-xhs-scheduler",
+  "version": "0.1.0",
+  "description": "Composed CLI: AI-generated content scheduled for Xiaohongshu posting",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ark-xhs-scheduler": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/cli-content": "workspace:*",
+    "@ark/cli-xhs": "workspace:*",
+    "@ark/core": "workspace:*",
+    "@ark/runtime": "workspace:*"
+  }
+}

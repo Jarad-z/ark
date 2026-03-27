@@ -1,0 +1,20 @@
+{
+  "name": "@ark/composer",
+  "version": "0.1.0",
+  "description": "Ark composition authoring tool: AI-assisted CLI wiring at create time",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/ai-bridge": "workspace:*",
+    "@ark/core": "workspace:*",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

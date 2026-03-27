@@ -1,0 +1,19 @@
+{
+  "name": "@ark/cli-content",
+  "version": "0.1.0",
+  "description": "AI content generation leaf CLI",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ark-content": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/ai-bridge": "workspace:*",
+    "@ark/core": "workspace:*"
+  }
+}

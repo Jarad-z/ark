@@ -1,0 +1,24 @@
+{
+  "name": "@ark/ark-cli",
+  "version": "0.1.0",
+  "description": "Ark meta CLI: compose, run, list, describe, validate, lineage",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ark": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/composer": "workspace:*",
+    "@ark/core": "workspace:*",
+    "@ark/runtime": "workspace:*",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

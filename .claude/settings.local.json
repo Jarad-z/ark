@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm:*)",
+      "Bash(find /d/ark -maxdepth 3 -type f \\\\\\(-name README* -o -name .eslintrc* -o -name .prettierrc* -o -name .cursorrules -o -name CLAUDE.md -o -name *.md \\\\\\))"
+    ]
+  }
+}

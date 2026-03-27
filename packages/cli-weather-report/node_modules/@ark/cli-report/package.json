@@ -1,0 +1,23 @@
+{
+  "name": "@ark/cli-report",
+  "version": "0.1.0",
+  "description": "Leaf CLI: generate a human-readable weather report via AI",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ark-report": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/ai-bridge": "workspace:*",
+    "@ark/core": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@ark/core",
+  "version": "0.1.0",
+  "description": "Ark framework kernel: types, schemas, template engine, I/O helpers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "vitest": "^2.0.0"
+  }
+}

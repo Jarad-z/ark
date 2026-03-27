@@ -1,0 +1,22 @@
+{
+  "name": "@ark/runtime",
+  "version": "0.1.0",
+  "description": "Ark pipeline execution engine",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/ai-bridge": "workspace:*",
+    "@ark/core": "workspace:*",
+    "execa": "^9.0.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}
