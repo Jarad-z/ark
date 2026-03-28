@@ -1,0 +1,80 @@
+apiVersion: ark/v1
+kind: CliDescriptor
+
+functional:
+  id: "@ark/cli-content"
+  version: "0.1.0"
+  displayName: "Content Generator CLI"
+  description: |
+    Generates platform-native social media content using AI.
+    Supports Xiaohongshu (xhs) and Twitter/X (x) output formats.
+  entrypoint: "dist/index.js"
+  modes: [manual, auto]
+
+  inputs:
+    - id: topic
+      type: string
+      required: true
+      description: "Topic or theme for the post."
+    - id: style
+      type: string
+      required: false
+      description: "Writing style: casual, professional, poetic."
+    - id: lang
+      type: string
+      required: false
+      description: "Language code. Defaults to zh-CN for xhs, en for x."
+
+  outputs:
+    - id: title
+      type: string
+      description: "Post title (empty string for Twitter)."
+    - id: body
+      type: string
+      description: "Post body text."
+    - id: tags
+      type: string[]
+      description: "List of hashtags (without # symbol)."
+
+  commands:
+    - name: xhs
+      description: "Generate a Xiaohongshu post."
+      options:
+        - flag: "--topic"
+          type: string
+          required: true
+          description: "Post topic."
+        - flag: "--style"
+          type: string
+          required: false
+          description: "Writing style (casual, professional, poetic)."
+        - flag: "--lang"
+          type: string
+          required: false
+          description: "Language code. Default: zh-CN."
+    - name: x
+      description: "Generate a Twitter/X post."
+      options:
+        - flag: "--topic"
+          type: string
+          required: true
+          description: "Post topic."
+        - flag: "--style"
+          type: string
+          required: false
+          description: "Writing style (casual, professional)."
+        - flag: "--lang"
+          type: string
+          required: false
+          description: "Language code. Default: en."
+
+  types: {}
+  env:
+    - name: ANTHROPIC_API_KEY
+      required: true
+      description: "Anthropic API key for Claude content generation."
+
+lineage:
+  kind: leaf
+  createdAt: "2026-03-28T00:00:00+00:00"
+  history: []

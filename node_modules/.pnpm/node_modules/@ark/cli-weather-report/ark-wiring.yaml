@@ -1,0 +1,81 @@
+apiVersion: ark/v1
+kind: WiringPlan
+generatedBy: "hand-written (phase5 validation)"
+generatedAt: "2025-03-27T00:00:00+00:00"
+approvedAt: "2025-03-27T00:00:00+00:00"
+
+pipeline:
+  mode: sequential
+
+steps:
+  - id: fetch
+    uses: "@ark/cli-weather"
+    command: fetch
+    description: "Fetch current weather data for the given city."
+    inputs:
+      city: "{{ ctx.flags.city | default: 'Beijing' }}"
+    outputs:
+      bind:
+        weatherData: "."
+
+  - id: review
+    uses: builtin/human-review
+    condition: "{{ ctx.mode == 'manual' }}"
+    description: "Show fetched weather data and ask for approval before generating report."
+    inputs:
+      payload: "{{ ctx.bindings.weatherData }}"
+    outputs:
+      bind:
+        approvedWeather: approved
+
+  - id: generate
+    uses: "@ark/cli-report"
+    command: generate
+    description: "Generate a human-readable weather report via AI."
+    inputs:
+      weatherData: "{{ ctx.mode == 'manual' ? ctx.bindings.approvedWeather : ctx.bindings.weatherData }}"
+      style: "{{ ctx.flags.style | default: 'casual daily report' }}"
+      outputDir: "{{ ctx.flags.output-dir | default: './reports' }}"
+    outputs:
+      bind:
+        result: "."
+
+  - id: done
+    uses: builtin/log
+    description: "Print completion message."
+    inputs:
+      message: "{{ ctx.bindings.result }}"
+
+errorPolicy:
+  onStepFailure: abort
+  retryPolicy:
+    maxAttempts: 3
+    backoffMs: 2000
+    jitter: true
+
+autoMode:
+  decisionStep:
+    before: fetch
+    prompt: |
+      Choose a Chinese city that would be interesting to report weather for today.
+      Also decide a report style: casual, professional, or poetic.
+      Return JSON with keys: city (string), style (string).
+    outputBindings:
+      city: ctx.flags.city
+      style: ctx.flags.style
+
+flags:
+  - name: city
+    type: string
+    required: false
+    description: "City to fetch weather for. In --auto mode, AI picks if omitted."
+  - name: style
+    type: string
+    required: false
+    default: "casual daily report"
+    description: "Report writing style (casual, professional, poetic)."
+  - name: output-dir
+    type: string
+    required: false
+    default: "./reports"
+    description: "Directory to save the markdown report."

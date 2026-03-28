@@ -8,7 +8,8 @@ export interface ScaffoldOptions {
   monorepoRoot: string
   request: ComposeRequest
   descriptors: Map<string, CliDescriptor>
-  wiringYaml: string
+  /** Single wiring YAML (single-command) or map of command→wiring (multi-command) */
+  wiringYaml: string | Map<string, string>
   lineage: LineageData
 }
 
@@ -26,7 +27,9 @@ export class PackageScaffolder {
       )
     }
 
+    const isMultiCommand = wiringYaml instanceof Map
     mkdirSync(join(targetDir, 'src'), { recursive: true })
+    if (isMultiCommand) mkdirSync(join(targetDir, 'wirings'), { recursive: true })
 
     this.writeDescriptor(targetDir, request, descriptors, lineage)
     this.writeWiring(targetDir, wiringYaml)
@@ -58,13 +61,20 @@ export class PackageScaffolder {
         modes: ['auto', 'manual'],
         inputs: [],
         outputs: [],
-        commands: [
-          {
-            name: 'run',
-            description: 'Execute the composed pipeline.',
-            options: allFlags,
-          },
-        ],
+        commands: request.commands && request.commands.length > 1
+          ? request.commands.map((cmd) => ({
+              name: cmd.name,
+              description: cmd.intent.split('\n')[0]?.trim() ?? cmd.name,
+              wiringRef: `wirings/${cmd.name}.yaml`,
+              options: allFlags,
+            }))
+          : [
+              {
+                name: 'run',
+                description: 'Execute the composed pipeline.',
+                options: allFlags,
+              },
+            ],
         types: {},
         env: [],
       },
@@ -78,8 +88,16 @@ export class PackageScaffolder {
     )
   }
 
-  private writeWiring(targetDir: string, wiringYaml: string): void {
-    writeFileSync(join(targetDir, 'ark-wiring.yaml'), wiringYaml, 'utf8')
+  private writeWiring(targetDir: string, wiringYaml: string | Map<string, string>): void {
+    if (typeof wiringYaml === 'string') {
+      // Single-command: write ark-wiring.yaml at package root
+      writeFileSync(join(targetDir, 'ark-wiring.yaml'), wiringYaml, 'utf8')
+    } else {
+      // Multi-command: write wirings/<command>.yaml for each command
+      for (const [commandName, yaml] of wiringYaml) {
+        writeFileSync(join(targetDir, 'wirings', `${commandName}.yaml`), yaml, 'utf8')
+      }
+    }
   }
 
   private writePackageJson(
@@ -134,17 +152,45 @@ export class PackageScaffolder {
   }
 
   private writeEntrypoint(targetDir: string, request: ComposeRequest): void {
-    const content = `#!/usr/bin/env node
-import { PipelineRunner } from '@ark/runtime'
+    const isMultiCommand = request.commands && request.commands.length > 1
+    const content = isMultiCommand
+      ? `#!/usr/bin/env node
+import { MultiCommandRunner } from '@ark/runtime'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const runner = new PipelineRunner({
-  wiringPath: join(import.meta.dirname, '..', 'ark-wiring.yaml'),
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
+
+const runner = new MultiCommandRunner({
+  packageDir: join(__dirname, '..'),
   composedCliId: '${request.output.id}',
-  monorepoRoot: join(import.meta.dirname, '..', '..', '..'),
+  monorepoRoot: join(__dirname, '..', '..', '..'),
 })
 
-await runner.run(process.argv.slice(2))
+const argv = process.argv.slice(2)
+if (!argv[0] || argv[0] === '--help' || argv[0] === '-h') {
+  runner.printHelp()
+  process.exit(0)
+}
+
+const result = await runner.run(argv)
+if (!result.success) process.exit(1)
+`
+      : `#!/usr/bin/env node
+import { PipelineRunner } from '@ark/runtime'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
+
+const runner = new PipelineRunner({
+  wiringPath: join(__dirname, '..', 'ark-wiring.yaml'),
+  composedCliId: '${request.output.id}',
+  monorepoRoot: join(__dirname, '..', '..', '..'),
+})
+
+const result = await runner.run(process.argv.slice(2))
+if (!result.success) process.exit(1)
 `
     writeFileSync(join(targetDir, 'src', 'index.ts'), content, 'utf8')
   }

@@ -2,6 +2,7 @@
   "name": "@ark/cli-content",
   "version": "0.1.0",
   "description": "AI content generation leaf CLI",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -15,5 +16,9 @@
   "dependencies": {
     "@ark/ai-bridge": "workspace:*",
     "@ark/core": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "typescript": "^5.0.0"
   }
 }

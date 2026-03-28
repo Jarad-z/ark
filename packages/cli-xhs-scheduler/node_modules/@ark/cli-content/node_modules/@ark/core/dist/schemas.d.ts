@@ -58,6 +58,7 @@ export declare const CommandSchema: z.ZodObject<{
         description?: string | undefined;
         default?: unknown;
     }>, "many">>;
+    wiringRef: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     description: string;
     options: {
@@ -68,6 +69,7 @@ export declare const CommandSchema: z.ZodObject<{
         default?: unknown;
     }[];
     name: string;
+    wiringRef?: string | undefined;
 }, {
     description: string;
     name: string;
@@ -78,6 +80,7 @@ export declare const CommandSchema: z.ZodObject<{
         description?: string | undefined;
         default?: unknown;
     }[] | undefined;
+    wiringRef?: string | undefined;
 }>;
 export declare const EnvVarSchema: z.ZodObject<{
     name: z.ZodString;
@@ -156,6 +159,7 @@ export declare const FunctionalSchema: z.ZodObject<{
             description?: string | undefined;
             default?: unknown;
         }>, "many">>;
+        wiringRef: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         description: string;
         options: {
@@ -166,6 +170,7 @@ export declare const FunctionalSchema: z.ZodObject<{
             default?: unknown;
         }[];
         name: string;
+        wiringRef?: string | undefined;
     }, {
         description: string;
         name: string;
@@ -176,6 +181,7 @@ export declare const FunctionalSchema: z.ZodObject<{
             description?: string | undefined;
             default?: unknown;
         }[] | undefined;
+        wiringRef?: string | undefined;
     }>, "many">>;
     types: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     env: z.ZodDefault<z.ZodArray<z.ZodObject<{
@@ -223,6 +229,7 @@ export declare const FunctionalSchema: z.ZodObject<{
             default?: unknown;
         }[];
         name: string;
+        wiringRef?: string | undefined;
     }[];
     types: Record<string, unknown>;
     env: {
@@ -260,6 +267,7 @@ export declare const FunctionalSchema: z.ZodObject<{
             description?: string | undefined;
             default?: unknown;
         }[] | undefined;
+        wiringRef?: string | undefined;
     }[] | undefined;
     types?: Record<string, unknown> | undefined;
     env?: {
@@ -434,6 +442,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 description?: string | undefined;
                 default?: unknown;
             }>, "many">>;
+            wiringRef: z.ZodOptional<z.ZodString>;
         }, "strip", z.ZodTypeAny, {
             description: string;
             options: {
@@ -444,6 +453,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 default?: unknown;
             }[];
             name: string;
+            wiringRef?: string | undefined;
         }, {
             description: string;
             name: string;
@@ -454,6 +464,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 description?: string | undefined;
                 default?: unknown;
             }[] | undefined;
+            wiringRef?: string | undefined;
         }>, "many">>;
         types: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
         env: z.ZodDefault<z.ZodArray<z.ZodObject<{
@@ -501,6 +512,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 default?: unknown;
             }[];
             name: string;
+            wiringRef?: string | undefined;
         }[];
         types: Record<string, unknown>;
         env: {
@@ -538,6 +550,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 description?: string | undefined;
                 default?: unknown;
             }[] | undefined;
+            wiringRef?: string | undefined;
         }[] | undefined;
         types?: Record<string, unknown> | undefined;
         env?: {
@@ -665,6 +678,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 default?: unknown;
             }[];
             name: string;
+            wiringRef?: string | undefined;
         }[];
         types: Record<string, unknown>;
         env: {
@@ -730,6 +744,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
                 description?: string | undefined;
                 default?: unknown;
             }[] | undefined;
+            wiringRef?: string | undefined;
         }[] | undefined;
         types?: Record<string, unknown> | undefined;
         env?: {
@@ -1093,7 +1108,21 @@ export declare const WiringPlanSchema: z.ZodObject<{
     }[] | undefined;
 }>;
 export type WiringPlan = z.infer<typeof WiringPlanSchema>;
-export declare const ComposeRequestSchema: z.ZodObject<{
+export declare const ComposeCommandSchema: z.ZodObject<{
+    name: z.ZodString;
+    intent: z.ZodString;
+    constraints: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
+}, "strip", z.ZodTypeAny, {
+    name: string;
+    intent: string;
+    constraints: string[];
+}, {
+    name: string;
+    intent: string;
+    constraints?: string[] | undefined;
+}>;
+export type ComposeCommand = z.infer<typeof ComposeCommandSchema>;
+export declare const ComposeRequestSchema: z.ZodEffects<z.ZodObject<{
     apiVersion: z.ZodLiteral<"ark/v1">;
     kind: z.ZodLiteral<"ComposeRequest">;
     output: z.ZodObject<{
@@ -1119,8 +1148,21 @@ export declare const ComposeRequestSchema: z.ZodObject<{
     }, {
         id: string;
     }>, "many">;
-    intent: z.ZodString;
+    intent: z.ZodOptional<z.ZodString>;
     constraints: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
+    commands: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        intent: z.ZodString;
+        constraints: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
+    }, "strip", z.ZodTypeAny, {
+        name: string;
+        intent: string;
+        constraints: string[];
+    }, {
+        name: string;
+        intent: string;
+        constraints?: string[] | undefined;
+    }>, "many">>;
     aiModel: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     kind: "ComposeRequest";
@@ -1128,14 +1170,19 @@ export declare const ComposeRequestSchema: z.ZodObject<{
         id: string;
     }[];
     apiVersion: "ark/v1";
+    constraints: string[];
     output: {
         id: string;
         displayName: string;
         targetDirectory: string;
         description?: string | undefined;
     };
-    intent: string;
-    constraints: string[];
+    commands?: {
+        name: string;
+        intent: string;
+        constraints: string[];
+    }[] | undefined;
+    intent?: string | undefined;
     aiModel?: string | undefined;
 }, {
     kind: "ComposeRequest";
@@ -1149,7 +1196,52 @@ export declare const ComposeRequestSchema: z.ZodObject<{
         targetDirectory: string;
         description?: string | undefined;
     };
-    intent: string;
+    commands?: {
+        name: string;
+        intent: string;
+        constraints?: string[] | undefined;
+    }[] | undefined;
+    intent?: string | undefined;
+    constraints?: string[] | undefined;
+    aiModel?: string | undefined;
+}>, {
+    kind: "ComposeRequest";
+    parents: {
+        id: string;
+    }[];
+    apiVersion: "ark/v1";
+    constraints: string[];
+    output: {
+        id: string;
+        displayName: string;
+        targetDirectory: string;
+        description?: string | undefined;
+    };
+    commands?: {
+        name: string;
+        intent: string;
+        constraints: string[];
+    }[] | undefined;
+    intent?: string | undefined;
+    aiModel?: string | undefined;
+}, {
+    kind: "ComposeRequest";
+    parents: {
+        id: string;
+    }[];
+    apiVersion: "ark/v1";
+    output: {
+        id: string;
+        displayName: string;
+        targetDirectory: string;
+        description?: string | undefined;
+    };
+    commands?: {
+        name: string;
+        intent: string;
+        constraints?: string[] | undefined;
+    }[] | undefined;
+    intent?: string | undefined;
     constraints?: string[] | undefined;
     aiModel?: string | undefined;
 }>;

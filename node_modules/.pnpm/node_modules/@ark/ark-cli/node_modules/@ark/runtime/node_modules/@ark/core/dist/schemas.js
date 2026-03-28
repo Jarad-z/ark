@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.WiringPlanSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
+exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.ComposeCommandSchema = exports.WiringPlanSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
 const zod_1 = require("zod");
 // ── Shared primitives ────────────────────────────────────────────────────────
 exports.ISO8601Schema = zod_1.z.string().datetime({ offset: true });
@@ -23,6 +23,9 @@ exports.CommandSchema = zod_1.z.object({
     name: zod_1.z.string(),
     description: zod_1.z.string(),
     options: zod_1.z.array(exports.CommandOptionSchema).default([]),
+    // For composed CLIs: points to the wiring plan for this command.
+    // Relative to the package root. Defaults to ark-wiring.yaml if omitted.
+    wiringRef: zod_1.z.string().optional(),
 });
 // ── Env var declaration ──────────────────────────────────────────────────────
 exports.EnvVarSchema = zod_1.z.object({
@@ -131,6 +134,13 @@ exports.WiringPlanSchema = zod_1.z.object({
     flags: zod_1.z.array(exports.WiringFlagSchema).default([]),
 });
 // ── ComposeRequest ───────────────────────────────────────────────────────────
+// A single-command compose request (original, simple form)
+// A multi-command compose request uses the `commands` array instead of `intent`
+exports.ComposeCommandSchema = zod_1.z.object({
+    name: zod_1.z.string(),
+    intent: zod_1.z.string(),
+    constraints: zod_1.z.array(zod_1.z.string()).default([]),
+});
 exports.ComposeRequestSchema = zod_1.z.object({
     apiVersion: zod_1.z.literal('ark/v1'),
     kind: zod_1.z.literal('ComposeRequest'),
@@ -141,10 +151,13 @@ exports.ComposeRequestSchema = zod_1.z.object({
         targetDirectory: zod_1.z.string(),
     }),
     parents: zod_1.z.array(zod_1.z.object({ id: zod_1.z.string() })),
-    intent: zod_1.z.string(),
+    // Single-command form (backward compatible)
+    intent: zod_1.z.string().optional(),
     constraints: zod_1.z.array(zod_1.z.string()).default([]),
+    // Multi-command form: each command gets its own wiring plan
+    commands: zod_1.z.array(exports.ComposeCommandSchema).optional(),
     aiModel: zod_1.z.string().optional(),
-});
+}).refine((d) => d.intent !== undefined || (d.commands !== undefined && d.commands.length > 0), { message: 'Either intent (single-command) or commands (multi-command) must be provided.' });
 // ── PipelineContext ──────────────────────────────────────────────────────────
 exports.PipelineContextSchema = zod_1.z.object({
     mode: zod_1.z.enum(['auto', 'manual']),

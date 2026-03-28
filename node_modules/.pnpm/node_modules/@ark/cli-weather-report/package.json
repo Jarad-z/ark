@@ -1,0 +1,21 @@
+{
+  "name": "@ark/cli-weather-report",
+  "version": "0.1.0",
+  "description": "Composed CLI: fetch weather and generate a daily report",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ark-weather-report": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ark/cli-report": "workspace:*",
+    "@ark/cli-weather": "workspace:*",
+    "@ark/core": "workspace:*",
+    "@ark/runtime": "workspace:*"
+  }
+}

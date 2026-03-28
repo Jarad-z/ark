@@ -29,6 +29,9 @@ export const CommandSchema = z.object({
   name: z.string(),
   description: z.string(),
   options: z.array(CommandOptionSchema).default([]),
+  // For composed CLIs: points to the wiring plan for this command.
+  // Relative to the package root. Defaults to ark-wiring.yaml if omitted.
+  wiringRef: z.string().optional(),
 })
 
 // ── Env var declaration ──────────────────────────────────────────────────────
@@ -166,6 +169,16 @@ export type WiringPlan = z.infer<typeof WiringPlanSchema>
 
 // ── ComposeRequest ───────────────────────────────────────────────────────────
 
+// A single-command compose request (original, simple form)
+// A multi-command compose request uses the `commands` array instead of `intent`
+export const ComposeCommandSchema = z.object({
+  name: z.string(),
+  intent: z.string(),
+  constraints: z.array(z.string()).default([]),
+})
+
+export type ComposeCommand = z.infer<typeof ComposeCommandSchema>
+
 export const ComposeRequestSchema = z.object({
   apiVersion: z.literal('ark/v1'),
   kind: z.literal('ComposeRequest'),
@@ -176,10 +189,16 @@ export const ComposeRequestSchema = z.object({
     targetDirectory: z.string(),
   }),
   parents: z.array(z.object({ id: z.string() })),
-  intent: z.string(),
+  // Single-command form (backward compatible)
+  intent: z.string().optional(),
   constraints: z.array(z.string()).default([]),
+  // Multi-command form: each command gets its own wiring plan
+  commands: z.array(ComposeCommandSchema).optional(),
   aiModel: z.string().optional(),
-})
+}).refine(
+  (d) => d.intent !== undefined || (d.commands !== undefined && d.commands.length > 0),
+  { message: 'Either intent (single-command) or commands (multi-command) must be provided.' }
+)
 
 export type ComposeRequest = z.infer<typeof ComposeRequestSchema>
 

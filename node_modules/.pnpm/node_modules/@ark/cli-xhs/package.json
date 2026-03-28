@@ -2,6 +2,7 @@
   "name": "@ark/cli-xhs",
   "version": "0.1.0",
   "description": "Xiaohongshu browser-automation leaf CLI",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -13,7 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ark/core": "workspace:*",
-    "playwright": "^1.45.0"
+    "@ark/core": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "typescript": "^5.0.0"
   }
 }

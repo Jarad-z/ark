@@ -11,7 +11,7 @@ describe('buildAgentBrowserCommands for Twitter/X', () => {
       },
     })
 
-    expect(commands[0]).toContain('load-session')
+    expect(commands[0]).toContain('--state')
     expect(commands[0]).toContain('/sessions/x.json')
     expect(commands.some(c => c.includes('x.com'))).toBe(true)
     expect(commands.some(c => c.includes('Autumn skincare'))).toBe(true)

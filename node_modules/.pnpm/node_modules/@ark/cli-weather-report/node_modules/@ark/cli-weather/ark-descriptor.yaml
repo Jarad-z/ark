@@ -1,0 +1,64 @@
+apiVersion: ark/v1
+kind: CliDescriptor
+
+functional:
+  id: "@ark/cli-weather"
+  version: "0.1.0"
+  displayName: "Weather CLI"
+  description: |
+    Fetches current weather data for a given city from wttr.in (no API key needed).
+    Returns structured JSON with temperature, humidity, wind, UV index, and description.
+  entrypoint: "dist/index.js"
+  modes: [manual, auto]
+
+  inputs:
+    - id: city
+      type: string
+      required: false
+      description: "City name to fetch weather for. Defaults to Beijing."
+
+  outputs:
+    - id: city
+      type: string
+      description: "Resolved city name."
+    - id: tempC
+      type: number
+      description: "Current temperature in Celsius."
+    - id: feelsLikeC
+      type: number
+      description: "Feels-like temperature in Celsius."
+    - id: humidity
+      type: number
+      description: "Humidity percentage."
+    - id: windKmph
+      type: number
+      description: "Wind speed in km/h."
+    - id: description
+      type: string
+      description: "Human-readable weather condition (e.g. Sunny, Partly Cloudy)."
+    - id: uvIndex
+      type: number
+      description: "UV index."
+    - id: visibility
+      type: number
+      description: "Visibility in km."
+    - id: fetchedAt
+      type: string
+      description: "ISO 8601 timestamp of when data was fetched."
+
+  commands:
+    - name: fetch
+      description: "Fetch weather data for a city."
+      options:
+        - flag: "--city"
+          type: string
+          required: false
+          description: "City name. Defaults to Beijing."
+
+  types: {}
+  env: []
+
+lineage:
+  kind: leaf
+  createdAt: "2025-01-01T00:00:00+00:00"
+  history: []
