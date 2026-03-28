@@ -203,6 +203,6 @@ steps:
         stepId: 'slow-step',
         signal: controller.signal,
       })
-    ).rejects.toThrow()
+    ).rejects.toThrow('Step cancelled')
   }, 5000)
 })

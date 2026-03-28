@@ -65,9 +65,11 @@ export class ChildCliRunner {
     if (signal) {
       abortHandler = () => {
         proc.kill('SIGTERM')
-        setTimeout(() => {
+        const killTimer = setTimeout(() => {
           try { proc.kill('SIGKILL') } catch { /* already exited */ }
         }, 2000)
+        // Clear the SIGKILL timer once the process has exited
+        proc.then(() => clearTimeout(killTimer)).catch(() => clearTimeout(killTimer))
       }
       signal.addEventListener('abort', abortHandler, { once: true })
     }
