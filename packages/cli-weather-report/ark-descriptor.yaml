@@ -27,7 +27,8 @@ functional:
 
   commands:
     - name: run
-      description: "Run the weather report pipeline."
+      description: "Fetch weather and generate a daily report."
+      wiringRef: "ark-wiring.yaml"
       options:
         - flag: "--city"
           type: string
