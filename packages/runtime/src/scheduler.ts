@@ -34,10 +34,10 @@ export class Scheduler {
           this.running.delete(id)
           this.done.add(id)
         })
-        .catch((err: Error) => {
+        .catch((err: unknown) => {
           this.running.delete(id)
           this.failed.add(id)
-          errors.push(err)
+          errors.push(err instanceof Error ? err : new Error(String(err)))
           if (parallelBehavior === 'failFast') {
             this.controller.abort()
           }

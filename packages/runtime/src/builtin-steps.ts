@@ -100,25 +100,14 @@ export async function parallelMap(
   const concurrency =
     typeof inputs['concurrency'] === 'number' ? inputs['concurrency'] : Infinity
 
-  // waitAll: use Promise.allSettled to collect null for failures
-  if (parallelBehavior === 'waitAll') {
-    const controller = new AbortController()
-    const settled = await Promise.allSettled(
-      items.map(item => runChild(packageId, command, { [inputKey]: item }, controller.signal))
-    )
-    const results = settled.map(r => (r.status === 'fulfilled' ? r.value : null))
-    return { output: { results } }
-  }
-
-  // failFast: use Scheduler for concurrency + abort on first failure
-  const results: Array<Record<string, unknown>> = new Array(items.length)
+  // Use Scheduler for both modes to respect concurrency limit
+  const results: Array<Record<string, unknown> | null> = new Array(items.length).fill(null)
   const dag = new Map(items.map((_, i) => [`item-${i}`, [] as string[]]))
-  const controller = new AbortController()
 
   const scheduler = new Scheduler({
     dag,
     concurrency,
-    parallelBehavior: 'failFast',
+    parallelBehavior,
     runStep: async (id, signal) => {
       const idx = parseInt(id.replace('item-', ''), 10)
       const item = items[idx]
@@ -127,7 +116,12 @@ export async function parallelMap(
     },
   })
 
-  await scheduler.run()
+  if (parallelBehavior === 'waitAll') {
+    // Swallow the error — failures are represented as null in results
+    await scheduler.run().catch(() => undefined)
+  } else {
+    await scheduler.run()
+  }
 
   return { output: { results } }
 }
