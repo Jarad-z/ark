@@ -132,7 +132,7 @@ export const RetryPolicySchema = z.object({
 export const ErrorPolicySchema = z.object({
   onStepFailure: z.enum(['abort', 'continue', 'retry']).default('abort'),
   retryPolicy: RetryPolicySchema.optional(),
-  parallelBehavior: z.enum(['failFast', 'waitAll']).default('failFast').optional(),
+  parallelBehavior: z.enum(['failFast', 'waitAll']).default('failFast'),
 })
 
 export const AutoModeDecisionStepSchema = z.object({
