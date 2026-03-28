@@ -20,7 +20,9 @@ export interface ChildRunOptions {
   /** if true, skip execution and return empty output */
   dryRun?: boolean
   /** step id for error context */
-  stepId: string
+  stepId?: string
+  /** optional AbortSignal to cancel the child process (SIGTERM then SIGKILL after 2 s) */
+  signal?: AbortSignal
 }
 
 export interface ChildRunResult {
@@ -36,7 +38,7 @@ export interface ChildRunResult {
  */
 export class ChildCliRunner {
   async run(options: ChildRunOptions): Promise<ChildRunResult> {
-    const { packageId, command, inputs, monorepoRoot, dryRun, stepId } = options
+    const { packageId, command, inputs, monorepoRoot, dryRun, stepId, signal } = options
 
     if (dryRun) {
       process.stdout.write(`[ark:runtime] [dry-run] Would run ${packageId}${command ? ` ${command}` : ''}\n`)
@@ -50,7 +52,7 @@ export class ChildCliRunner {
     const logs: string[] = []
     let arkOutput: Record<string, unknown> | undefined
 
-    const result = await execa('node', [entrypoint, ...args], {
+    const proc = execa('node', [entrypoint, ...args], {
       env: {
         ...process.env,
         [ARK_INPUT_ENV]: JSON.stringify(inputs),
@@ -58,6 +60,27 @@ export class ChildCliRunner {
       reject: false,
       all: false,
     })
+
+    let abortHandler: (() => void) | undefined
+    if (signal) {
+      abortHandler = () => {
+        proc.kill('SIGTERM')
+        setTimeout(() => {
+          try { proc.kill('SIGKILL') } catch { /* already exited */ }
+        }, 2000)
+      }
+      signal.addEventListener('abort', abortHandler, { once: true })
+    }
+
+    const result = await proc
+
+    if (abortHandler && signal) {
+      signal.removeEventListener('abort', abortHandler)
+    }
+
+    if (signal?.aborted) {
+      throw new Error('Step cancelled')
+    }
 
     // Process stdout line by line
     for (const line of (result.stdout ?? '').split('\n')) {
@@ -79,7 +102,7 @@ export class ChildCliRunner {
     if (result.exitCode !== 0) {
       throw new StepExecutionError(
         `Child CLI "${packageId}" exited with code ${result.exitCode}`,
-        stepId,
+        stepId ?? packageId,
         result.stderr
       )
     }
