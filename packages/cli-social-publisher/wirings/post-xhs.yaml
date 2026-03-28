@@ -1,0 +1,65 @@
+apiVersion: ark/v1
+kind: WiringPlan
+generatedBy: "hand-written"
+generatedAt: "2026-03-28T00:00:00+00:00"
+
+pipeline:
+  mode: sequential
+
+steps:
+  - id: generate
+    uses: "@ark/cli-content"
+    command: xhs
+    description: "Generate Xiaohongshu post content using AI."
+    inputs:
+      topic: "{{ ctx.flags.topic }}"
+      style: "{{ ctx.flags.style | default: 'casual' }}"
+    outputs:
+      bind:
+        content: "."
+
+  - id: review
+    uses: builtin/human-review
+    condition: "{{ ctx.mode == 'manual' }}"
+    description: "Show generated content for human review before posting."
+    inputs:
+      payload: "{{ ctx.bindings.content }}"
+    outputs:
+      bind:
+        approvedContent: approved
+
+  - id: post
+    uses: "@ark/cli-xhs"
+    command: post
+    description: "Publish the content to Xiaohongshu."
+    inputs:
+      title: "{{ ctx.mode == 'manual' ? ctx.bindings.approvedContent.title : ctx.bindings.content.title }}"
+      body: "{{ ctx.mode == 'manual' ? ctx.bindings.approvedContent.body : ctx.bindings.content.body }}"
+      tags: "{{ ctx.mode == 'manual' ? ctx.bindings.approvedContent.tags : ctx.bindings.content.tags }}"
+    outputs:
+      bind:
+        result: "."
+
+  - id: done
+    uses: builtin/log
+    description: "Print the published post URL."
+    inputs:
+      message: "{{ ctx.bindings.result.postUrl }}"
+
+errorPolicy:
+  onStepFailure: abort
+  retryPolicy:
+    maxAttempts: 3
+    backoffMs: 2000
+    jitter: true
+
+flags:
+  - name: topic
+    type: string
+    required: true
+    description: "Topic for the post."
+  - name: style
+    type: string
+    required: false
+    default: "casual"
+    description: "Writing style (casual, professional, poetic)."
