@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { writeFileSync, mkdirSync, promises as fs } from 'node:fs'
+import { writeFileSync, mkdirSync, existsSync, promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -177,6 +177,44 @@ steps:
     const result = await runner.run(['--topic', '秋季护肤'])
     expect(result.success).toBe(true)
   })
+
+  it('aborts a step that exceeds its timeout', async () => {
+    const pkgDir = join(tmpDir, 'packages', 'cli-slow')
+    if (!existsSync(pkgDir)) {
+      await fs.mkdir(join(pkgDir, 'dist'), { recursive: true })
+      await fs.writeFile(
+        join(pkgDir, 'dist', 'index.js'),
+        `await new Promise(r => setTimeout(r, 10_000))\nprocess.exit(0)\n`
+      )
+      await fs.writeFile(
+        join(pkgDir, 'package.json'),
+        JSON.stringify({ name: '@ark/cli-slow', version: '0.1.0', type: 'module' })
+      )
+    }
+
+    const wiringPath = writeWiring(
+      tmpDir,
+      `
+apiVersion: ark/v1
+kind: WiringPlan
+pipeline:
+  mode: sequential
+steps:
+  - id: slow
+    uses: "@ark/cli-slow"
+    timeout: "1s"
+errorPolicy:
+  onStepFailure: abort
+`
+    )
+
+    const runner = new PipelineRunner({
+      wiringPath,
+      composedCliId: '@ark/test',
+      monorepoRoot: tmpDir,
+    })
+    await expect(runner.run([])).rejects.toThrow(/timed out|cancelled/i)
+  }, 5000)
 
   it('ChildCliRunner cancels a running process when AbortSignal fires', async () => {
     const pkgDir = join(tmpDir, 'packages', 'cli-slow')
