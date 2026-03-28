@@ -216,6 +216,66 @@ errorPolicy:
     await expect(runner.run([])).rejects.toThrow(/timed out|cancelled/i)
   }, 5000)
 
+  it('dag mode runs independent steps concurrently', async () => {
+    // Two slow CLIs that each take 200ms
+    for (const name of ['cli-dag-a', 'cli-dag-b']) {
+      const pkgDir = join(tmpDir, 'packages', name)
+      await fs.mkdir(join(pkgDir, 'dist'), { recursive: true })
+      await fs.writeFile(
+        join(pkgDir, 'dist', 'index.js'),
+        `await new Promise(r => setTimeout(r, 200))\nprocess.stdout.write('ARK_OUTPUT:{"done":true}\\n')\nprocess.exit(0)\n`
+      )
+      await fs.writeFile(
+        join(pkgDir, 'package.json'),
+        JSON.stringify({
+          name: `@ark/${name}`,
+          version: '0.1.0',
+          type: 'module',
+          dependencies: { '@ark/core': 'workspace:*' },
+        })
+      )
+    }
+
+    const wiringPath = writeWiring(
+      tmpDir,
+      `
+apiVersion: ark/v1
+kind: WiringPlan
+pipeline:
+  mode: dag
+steps:
+  - id: a
+    uses: "@ark/cli-dag-a"
+    outputs:
+      bind:
+        aOut: done
+  - id: b
+    uses: "@ark/cli-dag-b"
+    outputs:
+      bind:
+        bOut: done
+  - id: c
+    uses: builtin/log
+    inputs:
+      message: "{{ ctx.bindings.aOut }}"
+    dependsOn: ["b"]
+`
+    )
+
+    const start = Date.now()
+    const runner = new PipelineRunner({
+      wiringPath,
+      composedCliId: '@ark/test',
+      monorepoRoot: tmpDir,
+    })
+    const result = await runner.run([])
+    const elapsed = Date.now() - start
+
+    expect(result.success).toBe(true)
+    // Sequential would be ~400ms. Concurrent should be ~200ms.
+    expect(elapsed).toBeLessThan(350)
+  }, 10000)
+
   it('ChildCliRunner cancels a running process when AbortSignal fires', async () => {
     const pkgDir = join(tmpDir, 'packages', 'cli-slow')
     await fs.mkdir(join(pkgDir, 'dist'), { recursive: true })

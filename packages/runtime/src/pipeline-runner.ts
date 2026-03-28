@@ -15,6 +15,8 @@ import type { AiBridge } from '@ark/ai-bridge'
 import { ChildCliRunner } from './child-cli-runner.js'
 import { StepResolver } from './step-resolver.js'
 import { AutoModeOrchestrator } from './auto-mode-orchestrator.js'
+import { buildDag } from './dag.js'
+import { Scheduler } from './scheduler.js'
 
 export interface PipelineRunnerOptions {
   wiringPath: string
@@ -71,6 +73,10 @@ export class PipelineRunner {
         `(mode=${mode}, dryRun=${dryRun}, runId=${ctx.meta.runId})\n`
     )
 
+    if (this.plan.pipeline.mode === 'dag') {
+      return this.runDag(ctx)
+    }
+
     const steps = this.plan.steps
     for (const step of steps) {
       await this.executeStep(step, ctx)
@@ -85,7 +91,40 @@ export class PipelineRunner {
     }
   }
 
-  private async executeStep(step: WiringStep, ctx: PipelineContext): Promise<void> {
+  private async runDag(ctx: PipelineContext): Promise<RunResult> {
+    const dag = buildDag(this.plan.steps)
+    const concurrency = this.plan.pipeline.concurrency ?? Infinity
+    const parallelBehavior = this.plan.errorPolicy?.parallelBehavior ?? 'failFast'
+
+    const scheduler = new Scheduler({
+      dag,
+      concurrency,
+      parallelBehavior,
+      runStep: async (id: string, signal: AbortSignal) => {
+        const step = this.plan.steps.find(s => s.id === id)!
+        await this.executeStep(step, ctx, signal)
+      },
+    })
+
+    try {
+      await scheduler.run()
+      process.stderr.write(`[ark:runtime] Pipeline completed successfully.\n`)
+      return {
+        success: true,
+        stepOutputs: ctx.stepOutputs,
+        bindings: ctx.bindings,
+      }
+    } catch (err) {
+      return {
+        success: false,
+        stepOutputs: ctx.stepOutputs,
+        bindings: ctx.bindings,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  }
+
+  private async executeStep(step: WiringStep, ctx: PipelineContext, signal?: AbortSignal): Promise<void> {
     // Auto-mode: fire AI decision before this step if configured
     if (ctx.mode === 'auto' && this.orchestrator?.shouldFireBefore(this.plan, step.id)) {
       await this.orchestrator.runDecision(this.plan, ctx)
@@ -110,7 +149,8 @@ export class PipelineRunner {
     )
 
     // Get executor and run
-    const executor = this.resolver.resolve(step, ctx.dryRun)
+    const parallelBehavior = this.plan.errorPolicy?.parallelBehavior ?? 'failFast'
+    const executor = this.resolver.resolve(step, ctx.dryRun, parallelBehavior, signal)
     const result = await this.runWithRetry(step, executor, resolvedInputs, ctx)
 
     if (result.skipped) {
