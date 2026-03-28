@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline'
 import type { PipelineContext } from '@ark/core'
+import { Scheduler } from './scheduler.js'
 
 export interface BuiltinStepResult {
   output: Record<string, unknown>
@@ -68,6 +69,67 @@ export async function conditional(
     return { output: { value: inputs['value'] } }
   }
   return { output: {}, skipped: true }
+}
+
+/**
+ * builtin/parallel-map
+ * Runs a CLI step once per item in an array, collecting results in order.
+ */
+export async function parallelMap(
+  inputs: Record<string, unknown>,
+  ctx: PipelineContext,
+  runChild: (
+    packageId: string,
+    command: string | undefined,
+    inputs: Record<string, unknown>,
+    signal: AbortSignal
+  ) => Promise<Record<string, unknown>>,
+  parallelBehavior: 'failFast' | 'waitAll'
+): Promise<BuiltinStepResult> {
+  if (!Array.isArray(inputs['items'])) {
+    throw new Error('parallel-map: items must be an array')
+  }
+  if (typeof inputs['step'] !== 'string') {
+    throw new Error('parallel-map: step must be a string')
+  }
+
+  const items = inputs['items'] as unknown[]
+  const packageId = inputs['step'] as string
+  const command = typeof inputs['command'] === 'string' ? inputs['command'] : undefined
+  const inputKey = typeof inputs['inputKey'] === 'string' ? inputs['inputKey'] : 'item'
+  const concurrency =
+    typeof inputs['concurrency'] === 'number' ? inputs['concurrency'] : Infinity
+
+  // waitAll: use Promise.allSettled to collect null for failures
+  if (parallelBehavior === 'waitAll') {
+    const controller = new AbortController()
+    const settled = await Promise.allSettled(
+      items.map(item => runChild(packageId, command, { [inputKey]: item }, controller.signal))
+    )
+    const results = settled.map(r => (r.status === 'fulfilled' ? r.value : null))
+    return { output: { results } }
+  }
+
+  // failFast: use Scheduler for concurrency + abort on first failure
+  const results: Array<Record<string, unknown>> = new Array(items.length)
+  const dag = new Map(items.map((_, i) => [`item-${i}`, [] as string[]]))
+  const controller = new AbortController()
+
+  const scheduler = new Scheduler({
+    dag,
+    concurrency,
+    parallelBehavior: 'failFast',
+    runStep: async (id, signal) => {
+      const idx = parseInt(id.replace('item-', ''), 10)
+      const item = items[idx]
+      const output = await runChild(packageId, command, { [inputKey]: item }, signal)
+      results[idx] = output
+    },
+  })
+
+  await scheduler.run()
+
+  return { output: { results } }
 }
 
 function promptLine(question: string): Promise<string> {

@@ -1,6 +1,6 @@
 import type { WiringStep, PipelineContext } from '@ark/core'
 import { StepExecutionError } from '@ark/core'
-import { humanReview, log, conditional } from './builtin-steps.js'
+import { humanReview, log, conditional, parallelMap } from './builtin-steps.js'
 import type { BuiltinStepResult } from './builtin-steps.js'
 import type { ChildCliRunner } from './child-cli-runner.js'
 
@@ -21,8 +21,33 @@ export class StepResolver {
     private monorepoRoot: string
   ) {}
 
-  resolve(step: WiringStep, dryRun: boolean): StepExecutor {
-    // Built-in step
+  resolve(step: WiringStep, dryRun: boolean, parallelBehavior: 'failFast' | 'waitAll' = 'failFast'): StepExecutor {
+    // builtin/parallel-map requires ChildCliRunner access
+    if (step.uses === 'builtin/parallel-map') {
+      const runner = this.childRunner
+      const monorepoRoot = this.monorepoRoot
+      return async (inputs: Record<string, unknown>, ctx: PipelineContext) => {
+        const runChild = (
+          packageId: string,
+          command: string | undefined,
+          childInputs: Record<string, unknown>,
+          signal: AbortSignal
+        ) =>
+          runner
+            .run({
+              packageId,
+              command,
+              inputs: childInputs,
+              monorepoRoot,
+              dryRun: dryRun || ctx.dryRun,
+              signal,
+            })
+            .then(r => r.output)
+        return parallelMap(inputs, ctx, runChild, parallelBehavior)
+      }
+    }
+
+    // Other built-in steps
     const builtin = BUILTIN_MAP[step.uses]
     if (builtin) return builtin
 
@@ -44,7 +69,7 @@ export class StepResolver {
   }
 
   isBuiltin(uses: string): boolean {
-    return uses in BUILTIN_MAP
+    return uses in BUILTIN_MAP || uses === 'builtin/parallel-map'
   }
 
   assertKnown(step: WiringStep): void {
