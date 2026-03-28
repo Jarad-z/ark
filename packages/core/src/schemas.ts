@@ -117,6 +117,8 @@ export const WiringStepSchema = z.object({
   condition: z.string().optional(),
   inputs: z.record(z.string(), z.unknown()).default({}),
   outputs: OutputBindingSchema.optional(),
+  timeout: z.string().regex(/^\d+[sm]$/).optional(),
+  dependsOn: z.array(z.string()).optional(),
 })
 
 export type WiringStep = z.infer<typeof WiringStepSchema>
@@ -130,6 +132,7 @@ export const RetryPolicySchema = z.object({
 export const ErrorPolicySchema = z.object({
   onStepFailure: z.enum(['abort', 'continue', 'retry']).default('abort'),
   retryPolicy: RetryPolicySchema.optional(),
+  parallelBehavior: z.enum(['failFast', 'waitAll']).default('failFast').optional(),
 })
 
 export const AutoModeDecisionStepSchema = z.object({
@@ -153,7 +156,8 @@ export const WiringPlanSchema = z.object({
   generatedAt: ISO8601Schema.optional(),
   approvedAt: ISO8601Schema.optional(),
   pipeline: z.object({
-    mode: z.enum(['sequential', 'parallel', 'dag']).default('sequential'),
+    mode: z.enum(['sequential', 'dag']).default('sequential'),
+    concurrency: z.number().int().positive().optional(),
   }),
   steps: z.array(WiringStepSchema),
   errorPolicy: ErrorPolicySchema.optional(),

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   CliDescriptorSchema,
   WiringPlanSchema,
+  WiringStepSchema,
+  ErrorPolicySchema,
   ComposeRequestSchema,
 } from './schemas.js'
 
@@ -71,6 +73,42 @@ describe('WiringPlanSchema', () => {
       ],
     }
     expect(WiringPlanSchema.safeParse(plan).success).toBe(true)
+  })
+})
+
+describe('schema extensions', () => {
+  it('accepts timeout on a step', () => {
+    const step = {
+      id: 'fetch',
+      uses: '@ark/cli-weather',
+      timeout: '30s',
+    }
+    expect(() => WiringStepSchema.parse(step)).not.toThrow()
+  })
+
+  it('accepts dependsOn on a step', () => {
+    const step = { id: 'b', uses: '@ark/cli-weather', dependsOn: ['a'] }
+    expect(() => WiringStepSchema.parse(step)).not.toThrow()
+  })
+
+  it('accepts pipeline concurrency', () => {
+    const plan = {
+      apiVersion: 'ark/v1',
+      kind: 'WiringPlan',
+      pipeline: { mode: 'dag', concurrency: 3 },
+      steps: [],
+    }
+    expect(() => WiringPlanSchema.parse(plan)).not.toThrow()
+  })
+
+  it('accepts parallelBehavior in errorPolicy', () => {
+    const policy = { onStepFailure: 'abort', parallelBehavior: 'waitAll' }
+    expect(() => ErrorPolicySchema.parse(policy)).not.toThrow()
+  })
+
+  it('rejects invalid timeout format', () => {
+    const step = { id: 'x', uses: '@ark/cli-weather', timeout: '30x' }
+    expect(() => WiringStepSchema.parse(step)).toThrow()
   })
 })
 
