@@ -81,14 +81,14 @@ export class PipelineRunner {
     }
 
     const steps = this.plan.steps
+    const topology = this.getTopology()
     this.display.pipelineStart({
       runId: ctx.meta.runId,
-      mode: this.getTopology(),
+      mode: topology,
       stepCount: steps.length,
     })
 
     // Pre-register all steps so the panel shows them from the start
-    const topology = this.getTopology()
     const dag = topology === 'dag' ? buildDag(steps) : new Map(steps.map(s => [s.id, [] as string[]]))
     for (const step of steps) {
       this.display.registerStep(step.id, step.uses, dag.get(step.id) ?? [])
@@ -112,8 +112,10 @@ export class PipelineRunner {
           continue
         }
         if (target !== undefined && step.id === target) {
-          // Clear the branch target — we've arrived
-          delete (ctx as unknown as Record<string, unknown>)['_branchTarget']
+          // Arrived at branch target — execute it, then stop
+          await this.executeStep(step, ctx, undefined, timings)
+          ;(ctx as unknown as Record<string, unknown>)['_branchTarget'] = '__end__'
+          continue
         }
 
         await this.executeStep(step, ctx, undefined, timings)
