@@ -125,7 +125,7 @@ describe('WiringPlanSchema — lifecycle and topology', () => {
       pipeline: { topology: 'sequential' as const, lifecycle: 'streaming' as const },
       streaming: {
         until: '2026-12-31T00:00:00+00:00',
-        stopOn: '{{ ctx.bindings.price > 100000 }}',
+        stopOn: [{ signal: 'SIGINT' }, { signal: 'SIGTERM' }],
         restartOnFailure: true,
       },
     }

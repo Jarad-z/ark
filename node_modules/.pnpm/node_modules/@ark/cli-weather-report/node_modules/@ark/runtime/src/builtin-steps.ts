@@ -86,14 +86,24 @@ export async function parallelMap(
   ) => Promise<Record<string, unknown>>,
   parallelBehavior: 'failFast' | 'waitAll'
 ): Promise<BuiltinStepResult> {
-  if (!Array.isArray(inputs['items'])) {
+  // items may arrive as a JSON string when passed via --flag '["a","b"]'
+  const rawItems = inputs['items']
+  let itemsValue: unknown = rawItems
+  if (typeof rawItems === 'string') {
+    try {
+      itemsValue = JSON.parse(rawItems)
+    } catch {
+      throw new Error('parallel-map: items must be an array')
+    }
+  }
+  if (!Array.isArray(itemsValue)) {
     throw new Error('parallel-map: items must be an array')
   }
   if (typeof inputs['step'] !== 'string') {
     throw new Error('parallel-map: step must be a string')
   }
 
-  const items = inputs['items'] as unknown[]
+  const items = itemsValue as unknown[]
   const packageId = inputs['step'] as string
   const command = typeof inputs['command'] === 'string' ? inputs['command'] : undefined
   const inputKey = typeof inputs['inputKey'] === 'string' ? inputs['inputKey'] : 'item'

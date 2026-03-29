@@ -1,0 +1,7 @@
+{
+  "name": "@my-org/cli-price-checker",
+  "version": "0.1.0",
+  "description": "Mock price checker CLI for examples",
+  "type": "module",
+  "main": "dist/index.js"
+}

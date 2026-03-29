@@ -112,7 +112,7 @@ const leafDescriptor = {
             pipeline: { topology: 'sequential', lifecycle: 'streaming' },
             streaming: {
                 until: '2026-12-31T00:00:00+00:00',
-                stopOn: '{{ ctx.bindings.price > 100000 }}',
+                stopOn: [{ signal: 'SIGINT' }, { signal: 'SIGTERM' }],
                 restartOnFailure: true,
             },
         };

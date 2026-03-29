@@ -1,0 +1,7 @@
+{
+  "name": "@my-org/cli-notify",
+  "version": "0.1.0",
+  "description": "Mock notify CLI for examples",
+  "type": "module",
+  "main": "dist/index.js"
+}

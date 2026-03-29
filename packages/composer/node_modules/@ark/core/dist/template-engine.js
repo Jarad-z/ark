@@ -46,11 +46,39 @@ function resolveExpr(expr, ctx) {
         const fallback = fallbackExpr.trim().replace(/^['"]|['"]$/g, '');
         return fallback;
     }
-    // Equality check: path == 'literal'
-    const eq = /^(.+?)\s*==\s*['"](.+?)['"]$/.exec(expr);
-    if (eq) {
-        const [, pathExpr, literal] = eq;
+    // Equality check: path == 'literal' or path == number
+    const eqStr = /^(.+?)\s*==\s*['"](.+?)['"]$/.exec(expr);
+    if (eqStr) {
+        const [, pathExpr, literal] = eqStr;
         return resolvePath(pathExpr.trim(), ctx) === literal;
+    }
+    const eqNum = /^(.+?)\s*==\s*(-?\d+(?:\.\d+)?)$/.exec(expr);
+    if (eqNum) {
+        const [, pathExpr, numStr] = eqNum;
+        return Number(resolvePath(pathExpr.trim(), ctx)) === Number(numStr);
+    }
+    // Numeric comparisons: path > num/path, path < num/path, path >= num/path, path <= num/path
+    const cmp = /^(.+?)\s*(>=|<=|>|<)\s*(.+)$/.exec(expr);
+    if (cmp) {
+        const [, leftExpr, op, rightExpr] = cmp;
+        const leftRaw = resolvePath(leftExpr.trim(), ctx);
+        // Right side: try as numeric literal first, then as a path
+        const rightLiteral = /^-?\d+(?:\.\d+)?$/.exec(rightExpr.trim());
+        const rightRaw = rightLiteral
+            ? Number(rightLiteral[0])
+            : resolvePath(rightExpr.trim(), ctx);
+        const val = Number(leftRaw);
+        const num = Number(rightRaw);
+        if (!isNaN(val) && !isNaN(num)) {
+            if (op === '>')
+                return val > num;
+            if (op === '<')
+                return val < num;
+            if (op === '>=')
+                return val >= num;
+            if (op === '<=')
+                return val <= num;
+        }
     }
     // Plain path or string literal
     return resolvePath(expr, ctx);
@@ -99,17 +127,21 @@ function resolveInputs(inputs, ctx) {
  */
 function applyBindings(bind, stepOutput, ctx) {
     const bindings = (ctx['bindings'] ?? {});
-    for (const [ctxKey, outputKey] of Object.entries(bind)) {
-        if (outputKey === '.') {
+    for (const [ctxKey, outputKeyOrConstant] of Object.entries(bind)) {
+        if (typeof outputKeyOrConstant !== 'string') {
+            // Non-string value: bind as a constant directly (e.g. {triggered: true})
+            bindings[ctxKey] = outputKeyOrConstant;
+        }
+        else if (outputKeyOrConstant === '.') {
             // Special key: bind the entire step output object
             bindings[ctxKey] = stepOutput;
         }
         else {
-            if (!(outputKey in stepOutput)) {
-                throw new errors_js_1.PortBindingError(`Output binding failed: key "${outputKey}" not found in step output. ` +
+            if (!(outputKeyOrConstant in stepOutput)) {
+                throw new errors_js_1.PortBindingError(`Output binding failed: key "${outputKeyOrConstant}" not found in step output. ` +
                     `Available keys: ${Object.keys(stepOutput).join(', ')}`);
             }
-            bindings[ctxKey] = stepOutput[outputKey];
+            bindings[ctxKey] = stepOutput[outputKeyOrConstant];
         }
     }
     ctx['bindings'] = bindings;

@@ -1,0 +1,73 @@
+apiVersion: ark/v1
+kind: WiringPlan
+
+# 第五章 5.5 — 持续监听（streaming）
+# 场景：持续监控商品价格，低于阈值时发送告警
+
+pipeline:
+  topology: sequential
+  lifecycle: streaming          # 声明为 streaming 模式：不会在一次执行后退出
+
+streaming:
+  until: "{{ ctx.bindings.priceAlert.triggered }}"            # 触发告警后停止
+  stopOn:
+    - signal: SIGINT            # Ctrl+C 时优雅退出
+    - signal: SIGTERM
+  restartOnFailure: true        # 某次循环失败时自动重启，不退出
+
+steps:
+  # 每次循环：获取当前价格
+  - id: fetch-price
+    uses: "@my-org/cli-price-checker"
+    inputs:
+      productId: "{{ ctx.flags.product-id }}"
+      source: "{{ ctx.flags.source | default: 'jd' }}"
+    outputs:
+      bind:
+        priceData: "."
+
+  # 检查是否低于阈值
+  - id: check-threshold
+    uses: builtin/branch
+    cases:
+      - condition: "{{ ctx.bindings.priceData.price <= ctx.flags.threshold }}"
+        next: alert             # 低于阈值 → 触发告警
+      - condition: "true"
+        next: log-and-wait      # 否则 → 记录日志，等下次循环
+
+  # 触发告警
+  - id: alert
+    uses: "@my-org/cli-notify"
+    inputs:
+      channel: "{{ ctx.flags.channel | default: 'wecom' }}"
+      message: "价格告警：{{ ctx.flags.product-id }} 当前价格 {{ ctx.bindings.priceData.price }} 元，低于阈值 {{ ctx.flags.threshold }} 元"
+    outputs:
+      bind:
+        priceAlert:
+          triggered: true
+
+  - id: log-and-wait
+    uses: builtin/log
+    inputs:
+      message: "当前价格 {{ ctx.bindings.priceData.price }} 元，高于阈值，继续监控..."
+
+errorPolicy:
+  onStepFailure: continue    # 单次循环失败时继续（配合 restartOnFailure）
+
+flags:
+  - name: product-id
+    type: string
+    required: true
+    description: "要监控的商品 ID"
+  - name: threshold
+    type: number
+    required: true
+    description: "价格阈值（元）"
+  - name: source
+    type: string
+    required: false
+    default: "jd"
+  - name: channel
+    type: string
+    required: false
+    default: "wecom"

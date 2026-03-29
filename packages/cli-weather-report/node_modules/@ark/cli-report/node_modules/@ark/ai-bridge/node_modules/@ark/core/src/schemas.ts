@@ -110,8 +110,16 @@ export type CliDescriptor = z.infer<typeof CliDescriptorSchema>
 // ── WiringPlan ───────────────────────────────────────────────────────────────
 
 export const OutputBindingSchema = z.object({
-  bind: z.record(z.string(), z.string()),
+  // value is either a step-output key (string) or a constant value to bind directly
+  bind: z.record(z.string(), z.union([z.string(), z.record(z.string(), z.unknown())])),
 })
+
+export const BranchCaseSchema = z.object({
+  condition: z.string(),
+  next: z.string(),
+})
+
+export type BranchCase = z.infer<typeof BranchCaseSchema>
 
 export const WiringStepSchema = z.object({
   id: z.string(),
@@ -123,6 +131,8 @@ export const WiringStepSchema = z.object({
   outputs: OutputBindingSchema.optional(),
   timeout: z.string().regex(/^\d+[sm]$/).optional(),
   dependsOn: z.array(z.string()).optional(),
+  // builtin/branch: cases is the guide-style field (condition + next)
+  cases: z.array(BranchCaseSchema).optional(),
 })
 
 export type WiringStep = z.infer<typeof WiringStepSchema>
@@ -154,8 +164,12 @@ export const WiringFlagSchema = z.object({
 })
 
 export const StreamingConfigSchema = z.object({
-  until: ISO8601Schema.optional(),
-  stopOn: z.string().optional(),
+  intervalMs: z.number().int().nonnegative().optional(),
+  // until accepts either an ISO8601 timestamp or a template expression like
+  // "{{ ctx.bindings.priceAlert.triggered == true }}"
+  until: z.string().optional(),
+  // stopOn accepts a list of OS signals, e.g. [{signal: "SIGINT"}]
+  stopOn: z.array(z.object({ signal: z.string() })).optional(),
   restartOnFailure: z.boolean().default(false),
 })
 

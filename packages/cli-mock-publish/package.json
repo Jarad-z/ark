@@ -1,0 +1,7 @@
+{
+  "name": "@my-org/cli-mock-publish",
+  "version": "0.1.0",
+  "description": "Mock publish CLI for examples",
+  "type": "module",
+  "main": "dist/index.js"
+}

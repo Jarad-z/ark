@@ -789,12 +789,23 @@ export declare const CliDescriptorSchema: z.ZodObject<{
 }>;
 export type CliDescriptor = z.infer<typeof CliDescriptorSchema>;
 export declare const OutputBindingSchema: z.ZodObject<{
-    bind: z.ZodRecord<z.ZodString, z.ZodString>;
+    bind: z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodRecord<z.ZodString, z.ZodUnknown>]>>;
 }, "strip", z.ZodTypeAny, {
-    bind: Record<string, string>;
+    bind: Record<string, string | Record<string, unknown>>;
 }, {
-    bind: Record<string, string>;
+    bind: Record<string, string | Record<string, unknown>>;
 }>;
+export declare const BranchCaseSchema: z.ZodObject<{
+    condition: z.ZodString;
+    next: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    condition: string;
+    next: string;
+}, {
+    condition: string;
+    next: string;
+}>;
+export type BranchCase = z.infer<typeof BranchCaseSchema>;
 export declare const WiringStepSchema: z.ZodObject<{
     id: z.ZodString;
     uses: z.ZodString;
@@ -803,38 +814,56 @@ export declare const WiringStepSchema: z.ZodObject<{
     condition: z.ZodOptional<z.ZodString>;
     inputs: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     outputs: z.ZodOptional<z.ZodObject<{
-        bind: z.ZodRecord<z.ZodString, z.ZodString>;
+        bind: z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodRecord<z.ZodString, z.ZodUnknown>]>>;
     }, "strip", z.ZodTypeAny, {
-        bind: Record<string, string>;
+        bind: Record<string, string | Record<string, unknown>>;
     }, {
-        bind: Record<string, string>;
+        bind: Record<string, string | Record<string, unknown>>;
     }>>;
     timeout: z.ZodOptional<z.ZodString>;
     dependsOn: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+    cases: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        condition: z.ZodString;
+        next: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        condition: string;
+        next: string;
+    }, {
+        condition: string;
+        next: string;
+    }>, "many">>;
 }, "strip", z.ZodTypeAny, {
     id: string;
     inputs: Record<string, unknown>;
     uses: string;
     description?: string | undefined;
     outputs?: {
-        bind: Record<string, string>;
+        bind: Record<string, string | Record<string, unknown>>;
     } | undefined;
-    command?: string | undefined;
     condition?: string | undefined;
+    command?: string | undefined;
     timeout?: string | undefined;
     dependsOn?: string[] | undefined;
+    cases?: {
+        condition: string;
+        next: string;
+    }[] | undefined;
 }, {
     id: string;
     uses: string;
     description?: string | undefined;
     inputs?: Record<string, unknown> | undefined;
     outputs?: {
-        bind: Record<string, string>;
+        bind: Record<string, string | Record<string, unknown>>;
     } | undefined;
-    command?: string | undefined;
     condition?: string | undefined;
+    command?: string | undefined;
     timeout?: string | undefined;
     dependsOn?: string[] | undefined;
+    cases?: {
+        condition: string;
+        next: string;
+    }[] | undefined;
 }>;
 export type WiringStep = z.infer<typeof WiringStepSchema>;
 export declare const RetryPolicySchema: z.ZodObject<{
@@ -916,16 +945,29 @@ export declare const WiringFlagSchema: z.ZodObject<{
     default?: unknown;
 }>;
 export declare const StreamingConfigSchema: z.ZodObject<{
+    intervalMs: z.ZodOptional<z.ZodNumber>;
     until: z.ZodOptional<z.ZodString>;
-    stopOn: z.ZodOptional<z.ZodString>;
+    stopOn: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        signal: z.ZodString;
+    }, "strip", z.ZodTypeAny, {
+        signal: string;
+    }, {
+        signal: string;
+    }>, "many">>;
     restartOnFailure: z.ZodDefault<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     restartOnFailure: boolean;
+    intervalMs?: number | undefined;
     until?: string | undefined;
-    stopOn?: string | undefined;
+    stopOn?: {
+        signal: string;
+    }[] | undefined;
 }, {
+    intervalMs?: number | undefined;
     until?: string | undefined;
-    stopOn?: string | undefined;
+    stopOn?: {
+        signal: string;
+    }[] | undefined;
     restartOnFailure?: boolean | undefined;
 }>;
 export type StreamingConfig = z.infer<typeof StreamingConfigSchema>;
@@ -963,16 +1005,29 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         concurrency?: number | undefined;
     }>;
     streaming: z.ZodOptional<z.ZodObject<{
+        intervalMs: z.ZodOptional<z.ZodNumber>;
         until: z.ZodOptional<z.ZodString>;
-        stopOn: z.ZodOptional<z.ZodString>;
+        stopOn: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            signal: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            signal: string;
+        }, {
+            signal: string;
+        }>, "many">>;
         restartOnFailure: z.ZodDefault<z.ZodBoolean>;
     }, "strip", z.ZodTypeAny, {
         restartOnFailure: boolean;
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
     }, {
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
         restartOnFailure?: boolean | undefined;
     }>>;
     steps: z.ZodArray<z.ZodObject<{
@@ -983,38 +1038,56 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         condition: z.ZodOptional<z.ZodString>;
         inputs: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
         outputs: z.ZodOptional<z.ZodObject<{
-            bind: z.ZodRecord<z.ZodString, z.ZodString>;
+            bind: z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodRecord<z.ZodString, z.ZodUnknown>]>>;
         }, "strip", z.ZodTypeAny, {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         }, {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         }>>;
         timeout: z.ZodOptional<z.ZodString>;
         dependsOn: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+        cases: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            condition: z.ZodString;
+            next: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            condition: string;
+            next: string;
+        }, {
+            condition: string;
+            next: string;
+        }>, "many">>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         inputs: Record<string, unknown>;
         uses: string;
         description?: string | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }, {
         id: string;
         uses: string;
         description?: string | undefined;
         inputs?: Record<string, unknown> | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }>, "many">;
     errorPolicy: z.ZodOptional<z.ZodObject<{
         onStepFailure: z.ZodDefault<z.ZodEnum<["abort", "continue", "retry"]>>;
@@ -1110,12 +1183,16 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         uses: string;
         description?: string | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }[];
     flags: {
         type: string;
@@ -1129,8 +1206,11 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
     approvedAt?: string | undefined;
     streaming?: {
         restartOnFailure: boolean;
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
     } | undefined;
     errorPolicy?: {
         onStepFailure: "abort" | "continue" | "retry";
@@ -1163,19 +1243,26 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         description?: string | undefined;
         inputs?: Record<string, unknown> | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }[];
     generatedBy?: string | undefined;
     generatedAt?: string | undefined;
     approvedAt?: string | undefined;
     streaming?: {
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
         restartOnFailure?: boolean | undefined;
     } | undefined;
     errorPolicy?: {
@@ -1216,12 +1303,16 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         uses: string;
         description?: string | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }[];
     flags: {
         type: string;
@@ -1235,8 +1326,11 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
     approvedAt?: string | undefined;
     streaming?: {
         restartOnFailure: boolean;
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
     } | undefined;
     errorPolicy?: {
         onStepFailure: "abort" | "continue" | "retry";
@@ -1269,19 +1363,26 @@ export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
         description?: string | undefined;
         inputs?: Record<string, unknown> | undefined;
         outputs?: {
-            bind: Record<string, string>;
+            bind: Record<string, string | Record<string, unknown>>;
         } | undefined;
-        command?: string | undefined;
         condition?: string | undefined;
+        command?: string | undefined;
         timeout?: string | undefined;
         dependsOn?: string[] | undefined;
+        cases?: {
+            condition: string;
+            next: string;
+        }[] | undefined;
     }[];
     generatedBy?: string | undefined;
     generatedAt?: string | undefined;
     approvedAt?: string | undefined;
     streaming?: {
+        intervalMs?: number | undefined;
         until?: string | undefined;
-        stopOn?: string | undefined;
+        stopOn?: {
+            signal: string;
+        }[] | undefined;
         restartOnFailure?: boolean | undefined;
     } | undefined;
     errorPolicy?: {

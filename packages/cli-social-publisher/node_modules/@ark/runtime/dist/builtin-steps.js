@@ -55,13 +55,24 @@ export async function conditional(inputs) {
  * Runs a CLI step once per item in an array, collecting results in order.
  */
 export async function parallelMap(inputs, ctx, runChild, parallelBehavior) {
-    if (!Array.isArray(inputs['items'])) {
+    // items may arrive as a JSON string when passed via --flag '["a","b"]'
+    const rawItems = inputs['items'];
+    let itemsValue = rawItems;
+    if (typeof rawItems === 'string') {
+        try {
+            itemsValue = JSON.parse(rawItems);
+        }
+        catch {
+            throw new Error('parallel-map: items must be an array');
+        }
+    }
+    if (!Array.isArray(itemsValue)) {
         throw new Error('parallel-map: items must be an array');
     }
     if (typeof inputs['step'] !== 'string') {
         throw new Error('parallel-map: step must be a string');
     }
-    const items = inputs['items'];
+    const items = itemsValue;
     const packageId = inputs['step'];
     const command = typeof inputs['command'] === 'string' ? inputs['command'] : undefined;
     const inputKey = typeof inputs['inputKey'] === 'string' ? inputs['inputKey'] : 'item';

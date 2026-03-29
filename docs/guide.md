@@ -412,7 +412,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential    # 步骤严格按顺序执行
+  topology: sequential    # 步骤严格按顺序执行
 
 steps:
   - id: fetch
@@ -505,7 +505,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: dag          # 启用 DAG 调度：框架自动推断依赖，无依赖的步骤并发运行
+  topology: dag      # 启用 DAG 调度：框架自动推断依赖，无依赖的步骤并发运行
   concurrency: 4     # 可选：最多同时运行 4 个步骤（默认不限）
 
 steps:
@@ -613,7 +613,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential
+  topology: sequential
 
 steps:
   - id: translate
@@ -700,7 +700,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential    # parallel-map 步骤内部自管理并发，外层用 sequential 即可
+  topology: sequential    # parallel-map 步骤内部自管理并发，外层用 sequential 即可
 
 steps:
   # fan-out：对 articles 数组的每个元素，并发调用 cli-translate
@@ -760,7 +760,7 @@ articles = ["Hello world", "Good morning", "How are you"]
 
 ```yaml
 pipeline:
-  mode: dag
+  topology: dag
 
 steps:
   # 这两个步骤同时开始
@@ -809,7 +809,7 @@ errorPolicy:
 
 ### 5.5 持续监听（streaming）
 
-**适用场景：** 不是"运行一次，结束"，而是持续运行，直到某个条件满足或收到停止信号。适合监控类、定时轮询类场景。
+**适用场景：** source CLI 持续向 stdout 输出事件（价格 tick、日志行、传感器数据……），框架持续读取并驱动 downstream 步骤处理每条事件，直到满足停止条件或收到信号。适合监控类、实时流处理场景。
 
 **例子：持续监控商品价格，低于阈值时发送告警**
 
@@ -818,17 +818,16 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential
-  lifecycle: streaming          # 声明为 streaming 模式：不会在一次执行后退出
+  topology: sequential
+  lifecycle: streaming          # 声明为 streaming 模式：source CLI 持续运行，框架持续监听其输出
 
-  # streaming 控制选项
-  streaming:
-    intervalMs: 30000           # 每 30 秒执行一次循环
-    until: "{{ ctx.bindings.priceAlert.triggered == true }}"    # 触发告警后停止
-    stopOn:
-      - signal: SIGINT          # Ctrl+C 时优雅退出
-      - signal: SIGTERM
-    restartOnFailure: true      # 某次循环失败时自动重启，不退出
+# streaming 控制选项（顶层字段，与 pipeline/steps 同级）
+streaming:
+  until: "{{ ctx.bindings.priceAlert.triggered }}"    # 为 truthy 时停止
+  stopOn:
+    - signal: SIGINT            # Ctrl+C 时优雅退出
+    - signal: SIGTERM
+  restartOnFailure: true        # source CLI 退出后自动重启，不停止流水线
 
 steps:
   # 每次循环：获取当前价格
@@ -892,19 +891,20 @@ flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `lifecycle` | `streaming` | 声明为持续运行模式 |
-| `streaming.intervalMs` | number | 每次循环的间隔毫秒数 |
-| `streaming.until` | 模板表达式 | 为 true 时停止循环 |
-| `streaming.stopOn` | 数组 | 触发停止的信号列表（SIGINT / SIGTERM） |
-| `streaming.restartOnFailure` | boolean | 失败时是否重启，默认 false |
+| `pipeline.lifecycle` | `streaming` | 声明为持续监听模式 |
+| `streaming.until` | 模板表达式 | 每次事件处理后求值，为 truthy 时停止 |
+| `streaming.stopOn` | `[{signal: string}]` | 收到指定 OS 信号时优雅退出 |
+| `streaming.restartOnFailure` | boolean | source CLI 退出后是否自动重启，默认 false |
+
+> **注意：** `streaming:` 是 WiringPlan 的**顶层字段**，与 `pipeline:`、`steps:` 同级，不是 `pipeline:` 的子字段。
 
 **运行方式：**
 
 ```bash
-# 启动持续监控
+# 启动持续监控（source CLI 持续运行，每次输出触发 downstream 处理）
 ark run @my-org/cli-price-monitor --product-id B09ABC123 --threshold 299
 
-# Ctrl+C 优雅退出（触发 SIGINT stopOn）
+# Ctrl+C 优雅退出（触发 SIGINT）
 ```
 
 ---
@@ -1037,7 +1037,7 @@ Ark 提供几个不需要额外安装的内置步骤类型。
       next: error-unsupported-platform
 ```
 
-**注意：** `builtin/branch` 只在 `mode: sequential` 下有效，DAG 模式里会被忽略。
+**注意：** `builtin/branch` 只在 `topology: sequential` 下有效，DAG 模式里会被忽略。
 
 ### 7.4 builtin/parallel-map
 
@@ -1117,7 +1117,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential
+  topology: sequential
 
 steps:
   - id: generate
@@ -1576,7 +1576,7 @@ steps:
 
 ### 11.4 并行错误策略（parallelBehavior）
 
-在 `mode: dag` 或 `builtin/parallel-map` 时生效：
+在 `topology: dag` 或 `builtin/parallel-map` 时生效：
 
 ```yaml
 errorPolicy:
@@ -1596,7 +1596,7 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: dag
+  topology: dag
   concurrency: 4
 
 steps:
@@ -1826,17 +1826,16 @@ apiVersion: ark/v1
 kind: WiringPlan
 
 pipeline:
-  mode: sequential | dag           # 执行拓扑
+  topology: sequential | dag       # 执行拓扑（必填，mode 为旧写法已废弃）
   concurrency: 4                   # 可选，最大并发步骤数（仅 dag 模式）
-  lifecycle: streaming             # 可选，声明持续运行模式
+  lifecycle: streaming             # 可选，声明持续监听模式
 
-  streaming:                       # 仅 lifecycle: streaming 时
-    intervalMs: 30000              # 循环间隔（毫秒）
-    until: "{{ 模板表达式 }}"       # 停止条件
-    stopOn:
-      - signal: SIGINT
-      - signal: SIGTERM
-    restartOnFailure: true
+streaming:                         # 顶层字段，仅 lifecycle: streaming 时有效
+  until: "{{ 模板表达式 }}"         # 每次事件后求值，为 truthy 时停止
+  stopOn:
+    - signal: SIGINT
+    - signal: SIGTERM
+  restartOnFailure: true           # source CLI 退出后自动重启
 
 steps:
   - id: step-name                  # 步骤 ID（在 pipeline 内唯一）

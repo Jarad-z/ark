@@ -1,0 +1,38 @@
+apiVersion: ark/v1
+kind: WiringPlan
+
+# 第五章 5.4 — 批量并发处理（parallel-map）
+# 场景：有一批英文文章标题需要翻译成中文，并行处理所有标题
+
+pipeline:
+  topology: sequential    # parallel-map 步骤内部自管理并发，外层用 sequential 即可
+
+steps:
+  # fan-out：对 articles 数组的每个元素，并发调用 cli-translate
+  - id: translate-all
+    uses: builtin/parallel-map
+    inputs:
+      items: "{{ ctx.flags.articles }}"      # 数组，如 '["Hello world","Good morning"]'
+      step: "@my-org/cli-translate"          # 对每个 item 调用哪个 CLI
+      command: translate                     # 调用的子命令（可选）
+      inputKey: text                         # 把每个 item 放入输入的哪个字段
+      concurrency: 5                         # 最多同时处理 5 个（默认不限）
+    outputs:
+      bind:
+        translations: results    # results 是按原顺序收集的输出数组
+
+  # fan-in：汇总所有翻译结果
+  - id: summarize
+    uses: builtin/log
+    inputs:
+      message: "共翻译 {{ ctx.bindings.translations.length }} 条"
+
+errorPolicy:
+  onStepFailure: abort
+  parallelBehavior: failFast    # 任一翻译失败 → 立即取消其他
+
+flags:
+  - name: articles
+    type: string
+    required: true
+    description: "JSON 数组格式的文章标题列表"

@@ -1,0 +1,7 @@
+{
+  "name": "@my-org/cli-translate",
+  "version": "0.1.0",
+  "description": "Mock translate CLI for examples",
+  "type": "module",
+  "main": "dist/index.js"
+}

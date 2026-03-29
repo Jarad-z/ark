@@ -239,10 +239,10 @@ steps:
 describe('PipelineRunner — streaming lifecycle', () => {
     let tmpDir;
     beforeEach(() => { tmpDir = makeTmpDir(); });
-    it('stopOn condition terminates pipeline mid-stream', async () => {
+    it('until condition terminates pipeline mid-stream', async () => {
         /**
          * Source emits { count: 1, stop: false }, { count: 2, stop: true }, ...
-         * stopOn: "{{ ctx.bindings.stop }}" — template engine resolves the boolean.
+         * until: "{{ ctx.bindings.stop }}" — template engine resolves the boolean.
          * Pipeline should stop after the 2nd event; count binding should be 2.
          *
          * Each event is spaced 50ms apart; the source emits up to 10 but we stop at 2.
@@ -262,7 +262,7 @@ pipeline:
   topology: sequential
   lifecycle: streaming
 streaming:
-  stopOn: "{{ ctx.bindings.stop }}"
+  until: "{{ ctx.bindings.stop }}"
 steps:
   - id: source
     uses: "@ark/cli-counter"
@@ -312,7 +312,7 @@ steps:
          *   - 2nd run: emits { run: 2, done: true  } then exits
          *
          * restartOnFailure: true causes the runner to restart after the 1st exit.
-         * stopOn: "{{ ctx.bindings.done }}" terminates after the 2nd event.
+         * until: "{{ ctx.bindings.done }}" terminates after the 2nd event.
          */
         const counterFile = join(tmpDir, 'runs.txt');
         writeFileSync(counterFile, '0');
@@ -332,7 +332,7 @@ pipeline:
   lifecycle: streaming
 streaming:
   restartOnFailure: true
-  stopOn: "{{ ctx.bindings.done }}"
+  until: "{{ ctx.bindings.done }}"
 steps:
   - id: source
     uses: "@ark/cli-one-shot"

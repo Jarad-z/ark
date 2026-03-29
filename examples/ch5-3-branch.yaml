@@ -1,0 +1,63 @@
+apiVersion: ark/v1
+kind: WiringPlan
+
+# 第五章 5.3 — 条件分支（if/else + branch）
+# 场景：把英文内容翻译成中文，根据内容长度决定是否需要人工审核，最后发到小红书
+
+pipeline:
+  topology: sequential
+
+steps:
+  - id: translate
+    uses: "@my-org/cli-translate"
+    command: translate
+    inputs:
+      text: "{{ ctx.flags.text }}"
+      targetLang: "ZH"
+    outputs:
+      bind:
+        translated: "."
+
+  # builtin/branch：根据条件选择跳转路径
+  # 框架按顺序检查每个 case 的 condition，第一个为 true 的 next 生效
+  - id: route
+    uses: builtin/branch
+    cases:
+      - condition: "{{ ctx.bindings.translated.translated.length > 200 }}"
+        next: review       # 内容超过 200 字，需要人工审核
+      - condition: "true"
+        next: post         # 否则直接发布（兜底 case）
+
+  - id: review
+    uses: builtin/human-review
+    description: "内容较长，请确认后再发布"
+    inputs:
+      payload: "{{ ctx.bindings.translated }}"
+    outputs:
+      bind:
+        approved: approved
+
+  - id: post
+    uses: "@my-org/cli-mock-publish"
+    command: post
+    inputs:
+      # 如果经过了 review 步骤，用审核后的内容；否则用翻译后的内容
+      title: "{{ ctx.bindings.approved.title | default: ctx.bindings.translated.title }}"
+      body: "{{ ctx.bindings.approved.translated | default: ctx.bindings.translated.translated }}"
+    outputs:
+      bind:
+        result: "."
+
+  - id: done
+    uses: builtin/log
+    inputs:
+      message: "已发布：{{ ctx.bindings.result.postUrl }}"
+
+errorPolicy:
+  onStepFailure: abort
+
+flags:
+  - name: text
+    type: string
+    required: true
+    description: "要翻译并发布的英文内容"

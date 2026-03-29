@@ -1,0 +1,62 @@
+apiVersion: ark/v1
+kind: WiringPlan
+
+# 第五章 5.2 — DAG 并行执行（dag）
+# 场景：同时获取上海、北京、广州三个城市的天气，再把三份数据合并生成对比报告
+
+pipeline:
+  topology: dag
+  concurrency: 4
+
+steps:
+  # 这三个步骤之间没有互相依赖，框架会并发启动它们
+  - id: fetch-shanghai
+    uses: "@ark/cli-weather"
+    command: fetch
+    inputs:
+      city: "Shanghai"
+    outputs:
+      bind:
+        weatherShanghai: "."
+
+  - id: fetch-beijing
+    uses: "@ark/cli-weather"
+    command: fetch
+    inputs:
+      city: "Beijing"
+    outputs:
+      bind:
+        weatherBeijing: "."
+
+  - id: fetch-guangzhou
+    uses: "@ark/cli-weather"
+    command: fetch
+    inputs:
+      city: "Guangzhou"
+    outputs:
+      bind:
+        weatherGuangzhou: "."
+
+  # generate 的 inputs 引用了三个 binding
+  # 框架自动推断：generate 依赖以上三个步骤，等它们全部完成后才开始
+  - id: generate
+    uses: "@ark/cli-report"
+    command: generate
+    inputs:
+      weatherData:
+        shanghai: "{{ ctx.bindings.weatherShanghai }}"
+        beijing: "{{ ctx.bindings.weatherBeijing }}"
+        guangzhou: "{{ ctx.bindings.weatherGuangzhou }}"
+      style: "comparison report"
+    outputs:
+      bind:
+        report: "."
+
+  - id: done
+    uses: builtin/log
+    inputs:
+      message: "{{ ctx.bindings.report }}"
+
+errorPolicy:
+  onStepFailure: abort
+  parallelBehavior: failFast

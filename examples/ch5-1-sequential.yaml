@@ -1,0 +1,68 @@
+apiVersion: ark/v1
+kind: WiringPlan
+
+# 第五章 5.1 — 顺序执行（sequential）
+# 场景：获取天气 → （manual 模式下人工审核）→ AI 生成报告 → 日志输出
+
+pipeline:
+  topology: sequential
+
+steps:
+  - id: fetch
+    uses: "@ark/cli-weather"
+    command: fetch
+    description: "获取指定城市的当前天气"
+    inputs:
+      city: "{{ ctx.flags.city | default: 'Beijing' }}"
+    outputs:
+      bind:
+        weatherData: "."
+
+  - id: review
+    uses: builtin/human-review
+    condition: "{{ ctx.mode == 'manual' }}"
+    description: "展示天气数据，等待人工确认"
+    inputs:
+      payload: "{{ ctx.bindings.weatherData }}"
+    outputs:
+      bind:
+        approvedWeather: approved
+
+  - id: generate
+    uses: "@ark/cli-report"
+    command: generate
+    description: "用 AI 生成天气播报"
+    inputs:
+      weatherData: "{{ ctx.mode == 'manual' ? ctx.bindings.approvedWeather : ctx.bindings.weatherData }}"
+      style: "{{ ctx.flags.style | default: 'casual daily report' }}"
+      outputDir: "{{ ctx.flags.output-dir | default: './reports' }}"
+    outputs:
+      bind:
+        result: "."
+
+  - id: done
+    uses: builtin/log
+    description: "打印完成信息"
+    inputs:
+      message: "{{ ctx.bindings.result }}"
+
+errorPolicy:
+  onStepFailure: abort
+  retryPolicy:
+    maxAttempts: 3
+    backoffMs: 2000
+    jitter: true
+
+flags:
+  - name: city
+    type: string
+    required: false
+    description: "要播报的城市"
+  - name: style
+    type: string
+    required: false
+    default: "casual daily report"
+  - name: output-dir
+    type: string
+    required: false
+    default: "./reports"

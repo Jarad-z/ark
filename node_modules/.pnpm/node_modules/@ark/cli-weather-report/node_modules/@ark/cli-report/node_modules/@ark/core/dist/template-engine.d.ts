@@ -16,5 +16,5 @@ export declare function resolveInputs(inputs: Record<string, unknown>, ctx: Reco
  * Apply output bindings from a step result to the pipeline context.
  * bind: { generatedPost: "post" } means ctx.bindings.generatedPost = stepOutput.post
  */
-export declare function applyBindings(bind: Record<string, string>, stepOutput: Record<string, unknown>, ctx: Record<string, unknown>): void;
+export declare function applyBindings(bind: Record<string, unknown>, stepOutput: Record<string, unknown>, ctx: Record<string, unknown>): void;
 //# sourceMappingURL=template-engine.d.ts.map

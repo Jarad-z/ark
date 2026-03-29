@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.ComposeCommandSchema = exports.WiringPlanSchema = exports.StreamingConfigSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
+exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.ComposeCommandSchema = exports.WiringPlanSchema = exports.StreamingConfigSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.BranchCaseSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
 const zod_1 = require("zod");
 // ── Shared primitives ────────────────────────────────────────────────────────
 exports.ISO8601Schema = zod_1.z.string().datetime({ offset: true });
@@ -87,7 +87,12 @@ exports.CliDescriptorSchema = zod_1.z.object({
 });
 // ── WiringPlan ───────────────────────────────────────────────────────────────
 exports.OutputBindingSchema = zod_1.z.object({
-    bind: zod_1.z.record(zod_1.z.string(), zod_1.z.string()),
+    // value is either a step-output key (string) or a constant value to bind directly
+    bind: zod_1.z.record(zod_1.z.string(), zod_1.z.union([zod_1.z.string(), zod_1.z.record(zod_1.z.string(), zod_1.z.unknown())])),
+});
+exports.BranchCaseSchema = zod_1.z.object({
+    condition: zod_1.z.string(),
+    next: zod_1.z.string(),
 });
 exports.WiringStepSchema = zod_1.z.object({
     id: zod_1.z.string(),
@@ -99,6 +104,8 @@ exports.WiringStepSchema = zod_1.z.object({
     outputs: exports.OutputBindingSchema.optional(),
     timeout: zod_1.z.string().regex(/^\d+[sm]$/).optional(),
     dependsOn: zod_1.z.array(zod_1.z.string()).optional(),
+    // builtin/branch: cases is the guide-style field (condition + next)
+    cases: zod_1.z.array(exports.BranchCaseSchema).optional(),
 });
 exports.RetryPolicySchema = zod_1.z.object({
     maxAttempts: zod_1.z.number().int().positive().default(3),
@@ -123,8 +130,12 @@ exports.WiringFlagSchema = zod_1.z.object({
     default: zod_1.z.unknown().optional(),
 });
 exports.StreamingConfigSchema = zod_1.z.object({
-    until: exports.ISO8601Schema.optional(),
-    stopOn: zod_1.z.string().optional(),
+    intervalMs: zod_1.z.number().int().nonnegative().optional(),
+    // until accepts either an ISO8601 timestamp or a template expression like
+    // "{{ ctx.bindings.priceAlert.triggered == true }}"
+    until: zod_1.z.string().optional(),
+    // stopOn accepts a list of OS signals, e.g. [{signal: "SIGINT"}]
+    stopOn: zod_1.z.array(zod_1.z.object({ signal: zod_1.z.string() })).optional(),
     restartOnFailure: zod_1.z.boolean().default(false),
 });
 exports.WiringPlanSchema = zod_1.z.object({

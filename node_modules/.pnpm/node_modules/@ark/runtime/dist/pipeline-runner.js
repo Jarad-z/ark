@@ -154,9 +154,14 @@ export class PipelineRunner {
             throw new ValidationError('Streaming pipeline must have at least one step (the source)', []);
         }
         const downstreamSteps = this.plan.steps.slice(1);
-        const untilMs = streamingConfig?.until ? new Date(streamingConfig.until).getTime() : Infinity;
-        const stopOn = streamingConfig?.stopOn;
         const restartOnFailure = streamingConfig?.restartOnFailure ?? false;
+        // until: ISO8601 string → time-based deadline; template expression → evaluated after each event
+        const untilRaw = streamingConfig?.until;
+        const untilDate = untilRaw ? new Date(untilRaw) : null;
+        const untilMs = untilDate && !isNaN(untilDate.getTime()) ? untilDate.getTime() : Infinity;
+        const untilTemplate = untilDate === null || isNaN(untilDate.getTime()) ? untilRaw : undefined;
+        // stopOn: [{signal: "SIGINT"}, {signal: "SIGTERM"}]
+        const stopSignals = streamingConfig?.stopOn?.map((s) => s.signal) ?? [];
         const resolvedInputs = resolveInputs(sourceStep.inputs, ctx);
         const startSource = () => {
             const packageId = sourceStep.uses;
@@ -198,10 +203,11 @@ export class PipelineRunner {
         // If until is already elapsed, stop immediately
         if (isFinite(untilMs) && untilDelayMs <= 0)
             stop();
-        const sigTermHandler = () => stop();
-        const sigIntHandler = () => stop();
-        process.on('SIGTERM', sigTermHandler);
-        process.on('SIGINT', sigIntHandler);
+        const sigHandler = () => stop();
+        const registeredSignals = stopSignals.length > 0 ? stopSignals : ['SIGTERM', 'SIGINT'];
+        for (const sig of registeredSignals) {
+            process.on(sig, sigHandler);
+        }
         const processLine = async (line) => {
             const parsed = parseOutputLine(line);
             if (parsed === undefined)
@@ -209,20 +215,34 @@ export class PipelineRunner {
             if (sourceStep.outputs?.bind) {
                 applyBindings(sourceStep.outputs.bind, parsed, ctx);
             }
+            // Reset branch target before running downstream steps for this event
+            ;
+            ctx['_branchTarget'] = undefined;
             for (const step of downstreamSteps) {
-                if (!state.stopped) {
-                    try {
-                        await this.executeStep(step, ctx, undefined, []);
-                    }
-                    catch (err) {
-                        state.error = err;
-                        stop();
-                        return;
-                    }
+                if (state.stopped)
+                    break;
+                // Respect branch jumps within the downstream steps
+                const target = ctx['_branchTarget'];
+                if (target === '__end__')
+                    break;
+                if (target !== undefined && step.id !== target)
+                    continue;
+                if (target !== undefined && step.id === target) {
+                    ;
+                    ctx['_branchTarget'] = '__end__';
+                }
+                try {
+                    await this.executeStep(step, ctx, undefined, []);
+                }
+                catch (err) {
+                    state.error = err;
+                    stop();
+                    return;
                 }
             }
-            if (stopOn) {
-                const result = interpolate(stopOn, ctx);
+            // Template-expression until: evaluate after each event
+            if (untilTemplate) {
+                const result = interpolate(untilTemplate, ctx);
                 if (result)
                     stop();
             }
@@ -246,8 +266,9 @@ export class PipelineRunner {
         }
         if (untilTimer)
             clearTimeout(untilTimer);
-        process.off('SIGTERM', sigTermHandler);
-        process.off('SIGINT', sigIntHandler);
+        for (const sig of registeredSignals) {
+            process.off(sig, sigHandler);
+        }
         process.stderr.write('[ark:runtime] Streaming pipeline stopped.\n');
         if (state.error !== undefined) {
             return {
@@ -276,7 +297,17 @@ export class PipelineRunner {
         this.display.stepStart(step.id, step.uses, deps);
         const stepStart = Date.now();
         // Resolve inputs against current context
-        const resolvedInputs = resolveInputs(step.inputs, ctx);
+        let resolvedInputs = resolveInputs(step.inputs, ctx);
+        // builtin/branch: support top-level `cases` field (guide format)
+        // cases: [{condition: "{{ expr }}", next: "stepId"}, ...]
+        // Evaluate each condition template and inject as `routes` for branch()
+        if (step.uses === 'builtin/branch' && step.cases !== undefined) {
+            const routes = step.cases.map((c) => ({
+                condition: interpolate(c.condition, ctx),
+                next: c.next,
+            }));
+            resolvedInputs = { ...resolvedInputs, routes };
+        }
         // Get executor and run
         const parallelBehavior = this.plan.errorPolicy?.parallelBehavior ?? 'failFast';
         const executor = this.resolver.resolve(step, ctx.dryRun, parallelBehavior, signal);
