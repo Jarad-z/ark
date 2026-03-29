@@ -55,6 +55,10 @@ export const FunctionalSchema = z.object({
   inputs: z.array(PortSchema).default([]),
   outputs: z.array(PortSchema).default([]),
   commands: z.array(CommandSchema).default([]),
+  // When this CLI is used as a leaf step inside another pipeline, this command
+  // is run if the wiring step does not specify a `command` field.
+  // Falls back to ark-wiring.yaml if omitted.
+  defaultCommand: z.string().optional(),
   // Free-form type definitions referenced by ports
   types: z.record(z.string(), z.unknown()).default({}),
   env: z.array(EnvVarSchema).default([]),
