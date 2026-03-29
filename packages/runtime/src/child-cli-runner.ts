@@ -38,7 +38,7 @@ export interface ChildRunResult {
  */
 export class ChildCliRunner {
   async run(options: ChildRunOptions): Promise<ChildRunResult> {
-    const { packageId, command, inputs, monorepoRoot, dryRun, stepId } = options
+    const { packageId, command, inputs, monorepoRoot, dryRun, stepId, signal } = options
 
     if (dryRun) {
       process.stdout.write(`[ark:runtime] [dry-run] Would run ${packageId}${command ? ` ${command}` : ''}\n`)
@@ -52,7 +52,7 @@ export class ChildCliRunner {
     const logs: string[] = []
     let arkOutput: Record<string, unknown> | undefined
 
-    const result = await execa('node', [entrypoint, ...args], {
+    const proc = execa('node', [entrypoint, ...args], {
       env: {
         ...process.env,
         [ARK_INPUT_ENV]: JSON.stringify(inputs),
@@ -60,6 +60,28 @@ export class ChildCliRunner {
       reject: false,
       all: false,
     })
+
+    let abortHandler: (() => void) | undefined
+    if (signal) {
+      abortHandler = () => {
+        proc.kill('SIGTERM')
+        const killTimer = setTimeout(() => {
+          try { proc.kill('SIGKILL') } catch { /* already exited */ }
+        }, 2000)
+        proc.then(() => clearTimeout(killTimer)).catch(() => clearTimeout(killTimer))
+      }
+      signal.addEventListener('abort', abortHandler, { once: true })
+    }
+
+    const result = await proc
+
+    if (abortHandler && signal) {
+      signal.removeEventListener('abort', abortHandler)
+    }
+
+    if (signal?.aborted) {
+      throw new Error('Step cancelled')
+    }
 
     // Process stdout line by line
     for (const line of (result.stdout ?? '').split('\n')) {
