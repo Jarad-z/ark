@@ -193,4 +193,22 @@ describe('WiringPlanSchema — lifecycle and topology', () => {
     const result = WiringPlanSchema.safeParse(plan)
     expect(result.success).toBe(false)
   })
+
+  it('rejects streaming config when lifecycle is absent (defaults to finite)', () => {
+    const plan = {
+      ...basePlan,
+      streaming: { restartOnFailure: false },
+    }
+    const result = WiringPlanSchema.safeParse(plan)
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts lifecycle: streaming without streaming config block', () => {
+    const plan = {
+      ...basePlan,
+      pipeline: { topology: 'sequential' as const, lifecycle: 'streaming' as const },
+    }
+    const result = WiringPlanSchema.safeParse(plan)
+    expect(result.success).toBe(true)
+  })
 })
