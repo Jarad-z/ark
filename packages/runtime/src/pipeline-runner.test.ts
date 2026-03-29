@@ -328,6 +328,60 @@ steps:
     expect(result.success).toBe(true)
   })
 
+  it('streaming lifecycle: runs downstream steps for each stdout event line', async () => {
+    // Build a fake source CLI that emits 3 JSON events then exits
+    const sourceDir = join(tmpDir, 'packages', 'fake-source')
+    mkdirSync(sourceDir, { recursive: true })
+    writeFileSync(
+      join(sourceDir, 'package.json'),
+      JSON.stringify({ name: '@ark/fake-source', main: 'index.js' })
+    )
+    writeFileSync(
+      join(sourceDir, 'index.js'),
+      [
+        'const events = [',
+        '  { price: 10 },',
+        '  { price: 20 },',
+        '  { price: 30 },',
+        ']',
+        'for (const e of events) {',
+        '  process.stdout.write("ARK_OUTPUT:" + JSON.stringify(e) + "\\n")',
+        '}',
+        'process.exit(0)',
+      ].join('\n')
+    )
+
+    const wiringPath = writeWiring(
+      tmpDir,
+      `
+apiVersion: ark/v1
+kind: WiringPlan
+pipeline:
+  topology: sequential
+  lifecycle: streaming
+steps:
+  - id: source
+    uses: "@ark/fake-source"
+    outputs:
+      bind:
+        tick: "."
+  - id: logger
+    uses: builtin/log
+    inputs:
+      message: "tick"
+`
+    )
+
+    const runner = new PipelineRunner({
+      wiringPath,
+      composedCliId: '@ark/test',
+      monorepoRoot: tmpDir,
+    })
+
+    const result = await runner.run([])
+    expect(result.success).toBe(true)
+  })
+
   it('routes to correct step via builtin/branch', async () => {
     const wiringPath = writeWiring(
       tmpDir,

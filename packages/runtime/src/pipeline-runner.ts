@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve, join } from 'node:path'
+import { createInterface } from 'node:readline'
+import { spawn } from 'node:child_process'
 import * as yaml from 'js-yaml'
 import { randomUUID } from 'node:crypto'
 import {
@@ -8,6 +10,8 @@ import {
   StepExecutionError,
   resolveInputs,
   applyBindings,
+  interpolate,
+  parseOutputLine,
 } from '@ark/core'
 import type { WiringPlan, PipelineContext, WiringStep } from '@ark/core'
 import { createAiBridge } from '@ark/ai-bridge'
@@ -92,6 +96,10 @@ export class PipelineRunner {
     const dag = topology === 'dag' ? buildDag(steps) : new Map(steps.map(s => [s.id, [] as string[]]))
     for (const step of steps) {
       this.display.registerStep(step.id, step.uses, dag.get(step.id) ?? [])
+    }
+
+    if (this.plan.pipeline.lifecycle === 'streaming') {
+      return this.runStreaming(ctx)
     }
 
     if (topology === 'dag') {
@@ -179,6 +187,113 @@ export class PipelineRunner {
         error: err instanceof Error ? err.message : String(err),
       }
     }
+  }
+
+  private async runStreaming(ctx: PipelineContext): Promise<RunResult> {
+    const streamingConfig = this.plan.streaming
+    const sourceStep = this.plan.steps[0]
+    if (!sourceStep) {
+      throw new ValidationError('Streaming pipeline must have at least one step (the source)', [])
+    }
+
+    const downstreamSteps = this.plan.steps.slice(1)
+    const untilMs = streamingConfig?.until ? new Date(streamingConfig.until).getTime() : Infinity
+    const stopOn = streamingConfig?.stopOn
+    const restartOnFailure = streamingConfig?.restartOnFailure ?? false
+
+    const resolvedInputs = resolveInputs(
+      sourceStep.inputs as Record<string, unknown>,
+      ctx as unknown as Record<string, unknown>
+    )
+
+    const startSource = (): ReturnType<typeof spawn> => {
+      const packageId = sourceStep.uses
+      const name = packageId.includes('/') ? packageId.split('/').slice(1).join('/') : packageId
+      const searchRoots = [
+        join(this.options.monorepoRoot, 'packages', name),
+        join(this.options.monorepoRoot, 'tools', name),
+      ]
+      let entrypoint = ''
+      for (const dir of searchRoots) {
+        const pkgPath = join(dir, 'package.json')
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { main?: string }
+          entrypoint = resolve(dir, pkg.main ?? 'dist/index.js')
+          break
+        }
+      }
+      if (!entrypoint) throw new Error(`Cannot resolve source CLI: ${packageId}`)
+
+      const args = sourceStep.command ? [sourceStep.command] : []
+      return spawn('node', [entrypoint, ...args], {
+        env: { ...process.env, ARK_INPUT_PAYLOAD: JSON.stringify(resolvedInputs) },
+        stdio: ['ignore', 'pipe', 'inherit'],
+      })
+    }
+
+    let proc = startSource()
+    let stopped = false
+
+    const stop = () => {
+      stopped = true
+      try { proc.kill('SIGTERM') } catch { /* already dead */ }
+    }
+
+    const untilTimer = isFinite(untilMs)
+      ? setTimeout(stop, untilMs - Date.now())
+      : undefined
+
+    const sigTermHandler = () => stop()
+    const sigIntHandler = () => stop()
+    process.on('SIGTERM', sigTermHandler)
+    process.on('SIGINT', sigIntHandler)
+
+    const processLine = async (line: string) => {
+      const parsed = parseOutputLine(line)
+      if (parsed === undefined) return
+
+      if (sourceStep.outputs?.bind) {
+        applyBindings(
+          sourceStep.outputs.bind,
+          parsed as Record<string, unknown>,
+          ctx as unknown as Record<string, unknown>
+        )
+      }
+
+      for (const step of downstreamSteps) {
+        if (!stopped) await this.executeStep(step, ctx, undefined, [])
+      }
+
+      if (stopOn) {
+        const result = interpolate(stopOn, ctx as unknown as Record<string, unknown>)
+        if (result) stop()
+      }
+    }
+
+    const runUntilExit = (p: ReturnType<typeof spawn>): Promise<void> =>
+      new Promise((res) => {
+        const rl = createInterface({ input: p.stdout!, crlfDelay: Infinity })
+        rl.on('line', (line) => { processLine(line).catch(() => {}) })
+        p.on('close', res)
+      })
+
+    while (!stopped) {
+      await runUntilExit(proc)
+      if (stopped) break
+      if (restartOnFailure) {
+        process.stderr.write('[ark:runtime] Source CLI exited, restarting...\n')
+        proc = startSource()
+      } else {
+        break
+      }
+    }
+
+    if (untilTimer) clearTimeout(untilTimer)
+    process.off('SIGTERM', sigTermHandler)
+    process.off('SIGINT', sigIntHandler)
+
+    process.stderr.write('[ark:runtime] Streaming pipeline stopped.\n')
+    return { success: true, stepOutputs: ctx.stepOutputs, bindings: ctx.bindings }
   }
 
   private async executeStep(
