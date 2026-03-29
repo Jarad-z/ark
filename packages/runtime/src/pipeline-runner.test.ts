@@ -303,4 +303,66 @@ steps:
       })
     ).rejects.toThrow('Step cancelled')
   }, 5000)
+
+  it('accepts deprecated mode field (backward compat)', async () => {
+    const wiringPath = writeWiring(
+      tmpDir,
+      `
+apiVersion: ark/v1
+kind: WiringPlan
+pipeline:
+  mode: sequential
+steps:
+  - id: greet
+    uses: builtin/log
+    inputs:
+      message: "hello"
+`
+    )
+    const runner = new PipelineRunner({
+      wiringPath,
+      composedCliId: '@ark/test',
+      monorepoRoot: tmpDir,
+    })
+    const result = await runner.run([])
+    expect(result.success).toBe(true)
+  })
+
+  it('routes to correct step via builtin/branch', async () => {
+    const wiringPath = writeWiring(
+      tmpDir,
+      `
+apiVersion: ark/v1
+kind: WiringPlan
+pipeline:
+  topology: sequential
+  lifecycle: finite
+steps:
+  - id: decide
+    uses: builtin/branch
+    inputs:
+      routes:
+        - condition: true
+          next: path-a
+      default: path-b
+  - id: path-a
+    uses: builtin/log
+    inputs:
+      message: "took path A"
+  - id: path-b
+    uses: builtin/log
+    inputs:
+      message: "took path B"
+`
+    )
+    const runner = new PipelineRunner({
+      wiringPath,
+      composedCliId: '@ark/test',
+      monorepoRoot: tmpDir,
+    })
+    const result = await runner.run([])
+    expect(result.success).toBe(true)
+    expect(result.stepOutputs['path-b']).toBeUndefined()
+    expect(result.stepOutputs['path-a']).toBeDefined()
+  })
 })

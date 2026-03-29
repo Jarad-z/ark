@@ -51,6 +51,14 @@ export class PipelineRunner {
     this.display = new Display()
   }
 
+  /**
+   * Returns the effective topology for this pipeline.
+   * Prefers `topology` (new field) over `mode` (deprecated) for backward compat.
+   */
+  private getTopology(): 'sequential' | 'dag' {
+    return this.plan.pipeline.topology ?? this.plan.pipeline.mode ?? 'sequential'
+  }
+
   async run(argv: string[]): Promise<RunResult> {
     const { flags, dryRun, mode } = this.parseArgv(argv)
 
@@ -75,24 +83,39 @@ export class PipelineRunner {
     const steps = this.plan.steps
     this.display.pipelineStart({
       runId: ctx.meta.runId,
-      mode: this.plan.pipeline.mode,
+      mode: this.getTopology(),
       stepCount: steps.length,
     })
 
     // Pre-register all steps so the panel shows them from the start
-    const dag = this.plan.pipeline.mode === 'dag' ? buildDag(steps) : new Map(steps.map(s => [s.id, [] as string[]]))
+    const topology = this.getTopology()
+    const dag = topology === 'dag' ? buildDag(steps) : new Map(steps.map(s => [s.id, [] as string[]]))
     for (const step of steps) {
       this.display.registerStep(step.id, step.uses, dag.get(step.id) ?? [])
     }
 
-    if (this.plan.pipeline.mode === 'dag') {
+    if (topology === 'dag') {
       return this.runDag(ctx, dag)
     }
 
     const wallStart = Date.now()
     const timings: StepTiming[] = []
     try {
-      for (const step of steps) {
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i]!
+
+        // Branch jump: skip steps until we reach _branchTarget
+        const target = (ctx as unknown as Record<string, unknown>)['_branchTarget'] as string | undefined
+        if (target === '__end__') break
+        if (target !== undefined && step.id !== target) {
+          process.stderr.write(`[ark:runtime] Step "${step.id}" skipped (branch).\n`)
+          continue
+        }
+        if (target !== undefined && step.id === target) {
+          // Clear the branch target — we've arrived
+          delete (ctx as unknown as Record<string, unknown>)['_branchTarget']
+        }
+
         await this.executeStep(step, ctx, undefined, timings)
       }
     } catch (err) {
@@ -213,6 +236,16 @@ export class PipelineRunner {
 
     // Store raw step output
     ;(ctx.stepOutputs as Record<string, unknown>)[step.id] = result.output
+
+    // Handle builtin/branch jump
+    if (step.uses === 'builtin/branch') {
+      const nextId = (result.output as Record<string, unknown>)['next']
+      if (typeof nextId === 'string') {
+        ;(ctx as unknown as Record<string, unknown>)['_branchTarget'] = nextId
+      } else {
+        ;(ctx as unknown as Record<string, unknown>)['_branchTarget'] = '__end__'
+      }
+    }
 
     // Apply output bindings to ctx.bindings (skip in dry-run — output is empty)
     if (step.outputs?.bind && !ctx.dryRun) {
