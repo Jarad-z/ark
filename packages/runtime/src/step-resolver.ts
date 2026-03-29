@@ -1,6 +1,6 @@
 import type { WiringStep, PipelineContext } from '@ark/core'
 import { StepExecutionError } from '@ark/core'
-import { humanReview, log, conditional, parallelMap } from './builtin-steps.js'
+import { humanReview, log, conditional, parallelMap, branch } from './builtin-steps.js'
 import type { BuiltinStepResult } from './builtin-steps.js'
 import type { ChildCliRunner } from './child-cli-runner.js'
 
@@ -13,6 +13,7 @@ const BUILTIN_MAP: Record<string, StepExecutor> = {
   'builtin/human-review': humanReview,
   'builtin/log': (inputs) => log(inputs),
   'builtin/conditional': (inputs) => conditional(inputs),
+  'builtin/branch': (inputs) => branch(inputs),
 }
 
 function parseTimeout(t: string): number {

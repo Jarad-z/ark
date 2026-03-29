@@ -1,8 +1,40 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parallelMap } from './builtin-steps.js'
+import { parallelMap, branch } from './builtin-steps.js'
 import type { PipelineContext } from '@ark/core'
 
 const mockCtx = { flags: {}, bindings: new Map(), mode: 'manual', dryRun: false } as unknown as PipelineContext
+
+describe('branch()', () => {
+  it('returns the next step id for the first matching condition', async () => {
+    const result = await branch({
+      routes: [
+        { condition: false, next: 'step-a' },
+        { condition: true, next: 'step-b' },
+      ],
+    })
+    expect(result.output).toEqual({ next: 'step-b' })
+    expect(result.skipped).toBeUndefined()
+  })
+
+  it('returns default when no condition matches', async () => {
+    const result = await branch({
+      routes: [{ condition: false, next: 'step-a' }],
+      default: 'step-fallback',
+    })
+    expect(result.output).toEqual({ next: 'step-fallback' })
+  })
+
+  it('returns { next: null } when no match and no default', async () => {
+    const result = await branch({
+      routes: [{ condition: false, next: 'step-a' }],
+    })
+    expect(result.output).toEqual({ next: null })
+  })
+
+  it('throws if routes is not an array', async () => {
+    await expect(branch({ routes: 'bad' })).rejects.toThrow('branch: routes must be an array')
+  })
+})
 
 describe('parallelMap', () => {
   it('runs each item and collects results in order', async () => {

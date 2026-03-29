@@ -126,6 +126,39 @@ export async function parallelMap(
   return { output: { results } }
 }
 
+export interface BranchRoute {
+  condition: unknown
+  next: string
+}
+
+/**
+ * builtin/branch
+ * Evaluates routes in order and returns the `next` step id for the first
+ * truthy condition. Returns { next: null } if no match and no default.
+ * The PipelineRunner reads output.next to jump execution.
+ */
+export async function branch(
+  inputs: Record<string, unknown>
+): Promise<BuiltinStepResult> {
+  if (!Array.isArray(inputs['routes'])) {
+    throw new Error('branch: routes must be an array')
+  }
+
+  const routes = inputs['routes'] as BranchRoute[]
+  for (const route of routes) {
+    if (route.condition) {
+      return { output: { next: route.next } }
+    }
+  }
+
+  const defaultNext = inputs['default']
+  if (typeof defaultNext === 'string') {
+    return { output: { next: defaultNext } }
+  }
+
+  return { output: { next: null } }
+}
+
 function promptLine(question: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false })
