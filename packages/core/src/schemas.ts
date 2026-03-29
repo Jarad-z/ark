@@ -166,7 +166,7 @@ export const WiringPlanSchema = z.object({
   pipeline: z.object({
     // New canonical field
     topology: z.enum(['sequential', 'dag']).optional(),
-    // Deprecated alias — still accepted, maps to topology in runtime
+    /** @deprecated Use topology instead. Will be removed in a future version. */
     mode: z.enum(['sequential', 'dag']).optional(),
     lifecycle: z.enum(['finite', 'streaming']).default('finite'),
     concurrency: z.number().int().positive().optional(),
@@ -183,6 +183,14 @@ export const WiringPlanSchema = z.object({
     })
     .optional(),
   flags: z.array(WiringFlagSchema).default([]),
+}).superRefine((plan, ctx) => {
+  if (plan.streaming !== undefined && plan.pipeline.lifecycle !== 'streaming') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['streaming'],
+      message: 'streaming config is only valid when pipeline.lifecycle is "streaming"',
+    })
+  }
 })
 
 export type WiringPlan = z.infer<typeof WiringPlanSchema>
