@@ -1,7 +1,14 @@
 import type { AiBridge, CompositionPlanResult } from '@ark/ai-bridge';
 import type { CliDescriptor, ComposeRequest } from '@ark/core';
+export interface ParallelSuggestion {
+    stepIds: string[];
+    sequentialMs: number;
+    recommendation: 'failFast' | 'waitAll';
+    reason: string;
+}
 export interface PlannerSessionResult extends CompositionPlanResult {
     prompt: string;
+    parallelSuggestion?: ParallelSuggestion;
 }
 export declare class AiPlannerSession {
     private bridge;

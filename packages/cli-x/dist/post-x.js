@@ -4,8 +4,7 @@ export function buildAgentBrowserCommands(options) {
     const tagsText = input.tags.map(t => `#${t}`).join(' ');
     const fullBody = `${input.body} ${tagsText}`.trim();
     return [
-        `agent-browser load-session "${sessionPath}"`,
-        `agent-browser open "https://x.com/compose/tweet"`,
+        `agent-browser --state "${sessionPath}" open "https://x.com/compose/tweet"`,
         `agent-browser wait --load networkidle`,
         `agent-browser snapshot -i`,
         `agent-browser fill @tweet-input "${fullBody.replace(/"/g, '\\"')}"`,

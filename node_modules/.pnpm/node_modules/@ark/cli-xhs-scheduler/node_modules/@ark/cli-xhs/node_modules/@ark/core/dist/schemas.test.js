@@ -82,4 +82,79 @@ const leafDescriptor = {
         (0, vitest_1.expect)(schemas_js_1.ComposeRequestSchema.safeParse(req).success).toBe(true);
     });
 });
+(0, vitest_1.describe)('WiringPlanSchema — lifecycle and topology', () => {
+    const basePlan = {
+        apiVersion: 'ark/v1',
+        kind: 'WiringPlan',
+        pipeline: { topology: 'sequential' },
+        steps: [],
+    };
+    (0, vitest_1.it)('accepts topology: sequential with lifecycle: finite (default)', () => {
+        const result = schemas_js_1.WiringPlanSchema.safeParse(basePlan);
+        (0, vitest_1.expect)(result.success).toBe(true);
+        if (result.success) {
+            (0, vitest_1.expect)(result.data.pipeline.lifecycle).toBe('finite');
+        }
+    });
+    (0, vitest_1.it)('accepts deprecated mode field', () => {
+        const plan = { ...basePlan, pipeline: { mode: 'sequential' } };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('rejects plan with neither topology nor mode', () => {
+        const plan = { ...basePlan, pipeline: { lifecycle: 'finite' } };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('accepts lifecycle: streaming with streaming config', () => {
+        const plan = {
+            ...basePlan,
+            pipeline: { topology: 'sequential', lifecycle: 'streaming' },
+            streaming: {
+                until: '2026-12-31T00:00:00+00:00',
+                stopOn: '{{ ctx.bindings.price > 100000 }}',
+                restartOnFailure: true,
+            },
+        };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('streaming config restartOnFailure defaults to false', () => {
+        const plan = {
+            ...basePlan,
+            pipeline: { topology: 'sequential', lifecycle: 'streaming' },
+            streaming: {},
+        };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(true);
+        if (result.success) {
+            (0, vitest_1.expect)(result.data.streaming?.restartOnFailure).toBe(false);
+        }
+    });
+    (0, vitest_1.it)('rejects streaming config when lifecycle is not streaming', () => {
+        const plan = {
+            ...basePlan,
+            pipeline: { topology: 'sequential', lifecycle: 'finite' },
+            streaming: { restartOnFailure: false },
+        };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('rejects streaming config when lifecycle is absent (defaults to finite)', () => {
+        const plan = {
+            ...basePlan,
+            streaming: { restartOnFailure: false },
+        };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('accepts lifecycle: streaming without streaming config block', () => {
+        const plan = {
+            ...basePlan,
+            pipeline: { topology: 'sequential', lifecycle: 'streaming' },
+        };
+        const result = schemas_js_1.WiringPlanSchema.safeParse(plan);
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+});
 //# sourceMappingURL=schemas.test.js.map

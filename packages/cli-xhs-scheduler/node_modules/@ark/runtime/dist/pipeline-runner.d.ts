@@ -20,8 +20,16 @@ export declare class PipelineRunner {
     private plan;
     private resolver;
     private orchestrator;
+    private display;
     constructor(options: PipelineRunnerOptions);
+    /**
+     * Returns the effective topology for this pipeline.
+     * Prefers `topology` (new field) over `mode` (deprecated) for backward compat.
+     */
+    private getTopology;
     run(argv: string[]): Promise<RunResult>;
+    private runDag;
+    private runStreaming;
     private executeStep;
     private runWithRetry;
     private loadPlan;

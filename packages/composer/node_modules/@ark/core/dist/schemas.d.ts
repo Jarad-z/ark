@@ -183,6 +183,7 @@ export declare const FunctionalSchema: z.ZodObject<{
         }[] | undefined;
         wiringRef?: string | undefined;
     }>, "many">>;
+    defaultCommand: z.ZodOptional<z.ZodString>;
     types: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     env: z.ZodDefault<z.ZodArray<z.ZodObject<{
         name: z.ZodString;
@@ -238,6 +239,7 @@ export declare const FunctionalSchema: z.ZodObject<{
         description?: string | undefined;
         default?: string | undefined;
     }[];
+    defaultCommand?: string | undefined;
 }, {
     id: string;
     description: string;
@@ -269,6 +271,7 @@ export declare const FunctionalSchema: z.ZodObject<{
         }[] | undefined;
         wiringRef?: string | undefined;
     }[] | undefined;
+    defaultCommand?: string | undefined;
     types?: Record<string, unknown> | undefined;
     env?: {
         name: string;
@@ -466,6 +469,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
             }[] | undefined;
             wiringRef?: string | undefined;
         }>, "many">>;
+        defaultCommand: z.ZodOptional<z.ZodString>;
         types: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
         env: z.ZodDefault<z.ZodArray<z.ZodObject<{
             name: z.ZodString;
@@ -521,6 +525,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
             description?: string | undefined;
             default?: string | undefined;
         }[];
+        defaultCommand?: string | undefined;
     }, {
         id: string;
         description: string;
@@ -552,6 +557,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
             }[] | undefined;
             wiringRef?: string | undefined;
         }[] | undefined;
+        defaultCommand?: string | undefined;
         types?: Record<string, unknown> | undefined;
         env?: {
             name: string;
@@ -687,6 +693,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
             description?: string | undefined;
             default?: string | undefined;
         }[];
+        defaultCommand?: string | undefined;
     };
     lineage: {
         kind: "leaf";
@@ -746,6 +753,7 @@ export declare const CliDescriptorSchema: z.ZodObject<{
             }[] | undefined;
             wiringRef?: string | undefined;
         }[] | undefined;
+        defaultCommand?: string | undefined;
         types?: Record<string, unknown> | undefined;
         env?: {
             name: string;
@@ -801,6 +809,8 @@ export declare const WiringStepSchema: z.ZodObject<{
     }, {
         bind: Record<string, string>;
     }>>;
+    timeout: z.ZodOptional<z.ZodString>;
+    dependsOn: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     id: string;
     inputs: Record<string, unknown>;
@@ -811,6 +821,8 @@ export declare const WiringStepSchema: z.ZodObject<{
     } | undefined;
     command?: string | undefined;
     condition?: string | undefined;
+    timeout?: string | undefined;
+    dependsOn?: string[] | undefined;
 }, {
     id: string;
     uses: string;
@@ -821,6 +833,8 @@ export declare const WiringStepSchema: z.ZodObject<{
     } | undefined;
     command?: string | undefined;
     condition?: string | undefined;
+    timeout?: string | undefined;
+    dependsOn?: string[] | undefined;
 }>;
 export type WiringStep = z.infer<typeof WiringStepSchema>;
 export declare const RetryPolicySchema: z.ZodObject<{
@@ -851,8 +865,10 @@ export declare const ErrorPolicySchema: z.ZodObject<{
         backoffMs?: number | undefined;
         jitter?: boolean | undefined;
     }>>;
+    parallelBehavior: z.ZodDefault<z.ZodEnum<["failFast", "waitAll"]>>;
 }, "strip", z.ZodTypeAny, {
     onStepFailure: "abort" | "continue" | "retry";
+    parallelBehavior: "failFast" | "waitAll";
     retryPolicy?: {
         maxAttempts: number;
         backoffMs: number;
@@ -865,6 +881,7 @@ export declare const ErrorPolicySchema: z.ZodObject<{
         backoffMs?: number | undefined;
         jitter?: boolean | undefined;
     } | undefined;
+    parallelBehavior?: "failFast" | "waitAll" | undefined;
 }>;
 export declare const AutoModeDecisionStepSchema: z.ZodObject<{
     before: z.ZodString;
@@ -898,19 +915,66 @@ export declare const WiringFlagSchema: z.ZodObject<{
     description?: string | undefined;
     default?: unknown;
 }>;
-export declare const WiringPlanSchema: z.ZodObject<{
+export declare const StreamingConfigSchema: z.ZodObject<{
+    until: z.ZodOptional<z.ZodString>;
+    stopOn: z.ZodOptional<z.ZodString>;
+    restartOnFailure: z.ZodDefault<z.ZodBoolean>;
+}, "strip", z.ZodTypeAny, {
+    restartOnFailure: boolean;
+    until?: string | undefined;
+    stopOn?: string | undefined;
+}, {
+    until?: string | undefined;
+    stopOn?: string | undefined;
+    restartOnFailure?: boolean | undefined;
+}>;
+export type StreamingConfig = z.infer<typeof StreamingConfigSchema>;
+export declare const WiringPlanSchema: z.ZodEffects<z.ZodObject<{
     apiVersion: z.ZodLiteral<"ark/v1">;
     kind: z.ZodLiteral<"WiringPlan">;
     generatedBy: z.ZodOptional<z.ZodString>;
     generatedAt: z.ZodOptional<z.ZodString>;
     approvedAt: z.ZodOptional<z.ZodString>;
-    pipeline: z.ZodObject<{
-        mode: z.ZodDefault<z.ZodEnum<["sequential", "parallel", "dag"]>>;
+    pipeline: z.ZodEffects<z.ZodObject<{
+        topology: z.ZodOptional<z.ZodEnum<["sequential", "dag"]>>;
+        /** @deprecated Use topology instead. Will be removed in a future version. */
+        mode: z.ZodOptional<z.ZodEnum<["sequential", "dag"]>>;
+        lifecycle: z.ZodDefault<z.ZodEnum<["finite", "streaming"]>>;
+        concurrency: z.ZodOptional<z.ZodNumber>;
     }, "strip", z.ZodTypeAny, {
-        mode: "sequential" | "parallel" | "dag";
+        lifecycle: "finite" | "streaming";
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        concurrency?: number | undefined;
     }, {
-        mode?: "sequential" | "parallel" | "dag" | undefined;
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        lifecycle?: "finite" | "streaming" | undefined;
+        concurrency?: number | undefined;
+    }>, {
+        lifecycle: "finite" | "streaming";
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        concurrency?: number | undefined;
+    }, {
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        lifecycle?: "finite" | "streaming" | undefined;
+        concurrency?: number | undefined;
     }>;
+    streaming: z.ZodOptional<z.ZodObject<{
+        until: z.ZodOptional<z.ZodString>;
+        stopOn: z.ZodOptional<z.ZodString>;
+        restartOnFailure: z.ZodDefault<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        restartOnFailure: boolean;
+        until?: string | undefined;
+        stopOn?: string | undefined;
+    }, {
+        until?: string | undefined;
+        stopOn?: string | undefined;
+        restartOnFailure?: boolean | undefined;
+    }>>;
     steps: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         uses: z.ZodString;
@@ -925,6 +989,8 @@ export declare const WiringPlanSchema: z.ZodObject<{
         }, {
             bind: Record<string, string>;
         }>>;
+        timeout: z.ZodOptional<z.ZodString>;
+        dependsOn: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         inputs: Record<string, unknown>;
@@ -935,6 +1001,8 @@ export declare const WiringPlanSchema: z.ZodObject<{
         } | undefined;
         command?: string | undefined;
         condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
     }, {
         id: string;
         uses: string;
@@ -945,6 +1013,8 @@ export declare const WiringPlanSchema: z.ZodObject<{
         } | undefined;
         command?: string | undefined;
         condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
     }>, "many">;
     errorPolicy: z.ZodOptional<z.ZodObject<{
         onStepFailure: z.ZodDefault<z.ZodEnum<["abort", "continue", "retry"]>>;
@@ -961,8 +1031,10 @@ export declare const WiringPlanSchema: z.ZodObject<{
             backoffMs?: number | undefined;
             jitter?: boolean | undefined;
         }>>;
+        parallelBehavior: z.ZodDefault<z.ZodEnum<["failFast", "waitAll"]>>;
     }, "strip", z.ZodTypeAny, {
         onStepFailure: "abort" | "continue" | "retry";
+        parallelBehavior: "failFast" | "waitAll";
         retryPolicy?: {
             maxAttempts: number;
             backoffMs: number;
@@ -975,6 +1047,7 @@ export declare const WiringPlanSchema: z.ZodObject<{
             backoffMs?: number | undefined;
             jitter?: boolean | undefined;
         } | undefined;
+        parallelBehavior?: "failFast" | "waitAll" | undefined;
     }>>;
     autoMode: z.ZodOptional<z.ZodObject<{
         decisionStep: z.ZodObject<{
@@ -1026,7 +1099,10 @@ export declare const WiringPlanSchema: z.ZodObject<{
     kind: "WiringPlan";
     apiVersion: "ark/v1";
     pipeline: {
-        mode: "sequential" | "parallel" | "dag";
+        lifecycle: "finite" | "streaming";
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        concurrency?: number | undefined;
     };
     steps: {
         id: string;
@@ -1038,6 +1114,8 @@ export declare const WiringPlanSchema: z.ZodObject<{
         } | undefined;
         command?: string | undefined;
         condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
     }[];
     flags: {
         type: string;
@@ -1049,8 +1127,14 @@ export declare const WiringPlanSchema: z.ZodObject<{
     generatedBy?: string | undefined;
     generatedAt?: string | undefined;
     approvedAt?: string | undefined;
+    streaming?: {
+        restartOnFailure: boolean;
+        until?: string | undefined;
+        stopOn?: string | undefined;
+    } | undefined;
     errorPolicy?: {
         onStepFailure: "abort" | "continue" | "retry";
+        parallelBehavior: "failFast" | "waitAll";
         retryPolicy?: {
             maxAttempts: number;
             backoffMs: number;
@@ -1068,7 +1152,10 @@ export declare const WiringPlanSchema: z.ZodObject<{
     kind: "WiringPlan";
     apiVersion: "ark/v1";
     pipeline: {
-        mode?: "sequential" | "parallel" | "dag" | undefined;
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        lifecycle?: "finite" | "streaming" | undefined;
+        concurrency?: number | undefined;
     };
     steps: {
         id: string;
@@ -1080,10 +1167,17 @@ export declare const WiringPlanSchema: z.ZodObject<{
         } | undefined;
         command?: string | undefined;
         condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
     }[];
     generatedBy?: string | undefined;
     generatedAt?: string | undefined;
     approvedAt?: string | undefined;
+    streaming?: {
+        until?: string | undefined;
+        stopOn?: string | undefined;
+        restartOnFailure?: boolean | undefined;
+    } | undefined;
     errorPolicy?: {
         onStepFailure?: "abort" | "continue" | "retry" | undefined;
         retryPolicy?: {
@@ -1091,6 +1185,113 @@ export declare const WiringPlanSchema: z.ZodObject<{
             backoffMs?: number | undefined;
             jitter?: boolean | undefined;
         } | undefined;
+        parallelBehavior?: "failFast" | "waitAll" | undefined;
+    } | undefined;
+    autoMode?: {
+        decisionStep: {
+            before: string;
+            prompt: string;
+            outputBindings: Record<string, string>;
+        };
+    } | undefined;
+    flags?: {
+        type: string;
+        name: string;
+        required?: boolean | undefined;
+        description?: string | undefined;
+        default?: unknown;
+    }[] | undefined;
+}>, {
+    kind: "WiringPlan";
+    apiVersion: "ark/v1";
+    pipeline: {
+        lifecycle: "finite" | "streaming";
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        concurrency?: number | undefined;
+    };
+    steps: {
+        id: string;
+        inputs: Record<string, unknown>;
+        uses: string;
+        description?: string | undefined;
+        outputs?: {
+            bind: Record<string, string>;
+        } | undefined;
+        command?: string | undefined;
+        condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
+    }[];
+    flags: {
+        type: string;
+        required: boolean;
+        name: string;
+        description?: string | undefined;
+        default?: unknown;
+    }[];
+    generatedBy?: string | undefined;
+    generatedAt?: string | undefined;
+    approvedAt?: string | undefined;
+    streaming?: {
+        restartOnFailure: boolean;
+        until?: string | undefined;
+        stopOn?: string | undefined;
+    } | undefined;
+    errorPolicy?: {
+        onStepFailure: "abort" | "continue" | "retry";
+        parallelBehavior: "failFast" | "waitAll";
+        retryPolicy?: {
+            maxAttempts: number;
+            backoffMs: number;
+            jitter: boolean;
+        } | undefined;
+    } | undefined;
+    autoMode?: {
+        decisionStep: {
+            before: string;
+            prompt: string;
+            outputBindings: Record<string, string>;
+        };
+    } | undefined;
+}, {
+    kind: "WiringPlan";
+    apiVersion: "ark/v1";
+    pipeline: {
+        topology?: "sequential" | "dag" | undefined;
+        mode?: "sequential" | "dag" | undefined;
+        lifecycle?: "finite" | "streaming" | undefined;
+        concurrency?: number | undefined;
+    };
+    steps: {
+        id: string;
+        uses: string;
+        description?: string | undefined;
+        inputs?: Record<string, unknown> | undefined;
+        outputs?: {
+            bind: Record<string, string>;
+        } | undefined;
+        command?: string | undefined;
+        condition?: string | undefined;
+        timeout?: string | undefined;
+        dependsOn?: string[] | undefined;
+    }[];
+    generatedBy?: string | undefined;
+    generatedAt?: string | undefined;
+    approvedAt?: string | undefined;
+    streaming?: {
+        until?: string | undefined;
+        stopOn?: string | undefined;
+        restartOnFailure?: boolean | undefined;
+    } | undefined;
+    errorPolicy?: {
+        onStepFailure?: "abort" | "continue" | "retry" | undefined;
+        retryPolicy?: {
+            maxAttempts?: number | undefined;
+            backoffMs?: number | undefined;
+            jitter?: boolean | undefined;
+        } | undefined;
+        parallelBehavior?: "failFast" | "waitAll" | undefined;
     } | undefined;
     autoMode?: {
         decisionStep: {

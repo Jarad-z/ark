@@ -10,7 +10,9 @@ export interface ChildRunOptions {
     /** if true, skip execution and return empty output */
     dryRun?: boolean;
     /** step id for error context */
-    stepId: string;
+    stepId?: string;
+    /** optional AbortSignal to cancel the child process (SIGTERM then SIGKILL after 2 s) */
+    signal?: AbortSignal;
 }
 export interface ChildRunResult {
     output: Record<string, unknown>;

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.ComposeCommandSchema = exports.WiringPlanSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
+exports.PipelineContextSchema = exports.ComposeRequestSchema = exports.ComposeCommandSchema = exports.WiringPlanSchema = exports.StreamingConfigSchema = exports.WiringFlagSchema = exports.AutoModeDecisionStepSchema = exports.ErrorPolicySchema = exports.RetryPolicySchema = exports.WiringStepSchema = exports.OutputBindingSchema = exports.CliDescriptorSchema = exports.LineageSchema = exports.ParentRefSchema = exports.FunctionalSchema = exports.EnvVarSchema = exports.CommandSchema = exports.CommandOptionSchema = exports.PortSchema = exports.ISO8601Schema = void 0;
 const zod_1 = require("zod");
 // ── Shared primitives ────────────────────────────────────────────────────────
 exports.ISO8601Schema = zod_1.z.string().datetime({ offset: true });
@@ -45,6 +45,10 @@ exports.FunctionalSchema = zod_1.z.object({
     inputs: zod_1.z.array(exports.PortSchema).default([]),
     outputs: zod_1.z.array(exports.PortSchema).default([]),
     commands: zod_1.z.array(exports.CommandSchema).default([]),
+    // When this CLI is used as a leaf step inside another pipeline, this command
+    // is run if the wiring step does not specify a `command` field.
+    // Falls back to ark-wiring.yaml if omitted.
+    defaultCommand: zod_1.z.string().optional(),
     // Free-form type definitions referenced by ports
     types: zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).default({}),
     env: zod_1.z.array(exports.EnvVarSchema).default([]),
@@ -93,6 +97,8 @@ exports.WiringStepSchema = zod_1.z.object({
     condition: zod_1.z.string().optional(),
     inputs: zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).default({}),
     outputs: exports.OutputBindingSchema.optional(),
+    timeout: zod_1.z.string().regex(/^\d+[sm]$/).optional(),
+    dependsOn: zod_1.z.array(zod_1.z.string()).optional(),
 });
 exports.RetryPolicySchema = zod_1.z.object({
     maxAttempts: zod_1.z.number().int().positive().default(3),
@@ -102,6 +108,7 @@ exports.RetryPolicySchema = zod_1.z.object({
 exports.ErrorPolicySchema = zod_1.z.object({
     onStepFailure: zod_1.z.enum(['abort', 'continue', 'retry']).default('abort'),
     retryPolicy: exports.RetryPolicySchema.optional(),
+    parallelBehavior: zod_1.z.enum(['failFast', 'waitAll']).default('failFast'),
 });
 exports.AutoModeDecisionStepSchema = zod_1.z.object({
     before: zod_1.z.string(),
@@ -115,6 +122,11 @@ exports.WiringFlagSchema = zod_1.z.object({
     description: zod_1.z.string().optional(),
     default: zod_1.z.unknown().optional(),
 });
+exports.StreamingConfigSchema = zod_1.z.object({
+    until: exports.ISO8601Schema.optional(),
+    stopOn: zod_1.z.string().optional(),
+    restartOnFailure: zod_1.z.boolean().default(false),
+});
 exports.WiringPlanSchema = zod_1.z.object({
     apiVersion: zod_1.z.literal('ark/v1'),
     kind: zod_1.z.literal('WiringPlan'),
@@ -122,8 +134,14 @@ exports.WiringPlanSchema = zod_1.z.object({
     generatedAt: exports.ISO8601Schema.optional(),
     approvedAt: exports.ISO8601Schema.optional(),
     pipeline: zod_1.z.object({
-        mode: zod_1.z.enum(['sequential', 'parallel', 'dag']).default('sequential'),
-    }),
+        // New canonical field
+        topology: zod_1.z.enum(['sequential', 'dag']).optional(),
+        /** @deprecated Use topology instead. Will be removed in a future version. */
+        mode: zod_1.z.enum(['sequential', 'dag']).optional(),
+        lifecycle: zod_1.z.enum(['finite', 'streaming']).default('finite'),
+        concurrency: zod_1.z.number().int().positive().optional(),
+    }).refine((p) => p.topology !== undefined || p.mode !== undefined, { message: 'pipeline.topology (or deprecated pipeline.mode) is required' }),
+    streaming: exports.StreamingConfigSchema.optional(),
     steps: zod_1.z.array(exports.WiringStepSchema),
     errorPolicy: exports.ErrorPolicySchema.optional(),
     autoMode: zod_1.z
@@ -132,6 +150,14 @@ exports.WiringPlanSchema = zod_1.z.object({
     })
         .optional(),
     flags: zod_1.z.array(exports.WiringFlagSchema).default([]),
+}).superRefine((plan, ctx) => {
+    if (plan.streaming !== undefined && plan.pipeline.lifecycle !== 'streaming') {
+        ctx.addIssue({
+            code: zod_1.z.ZodIssueCode.custom,
+            path: ['streaming'],
+            message: 'streaming config is only valid when pipeline.lifecycle is "streaming"',
+        });
+    }
 });
 // ── ComposeRequest ───────────────────────────────────────────────────────────
 // A single-command compose request (original, simple form)

@@ -6,7 +6,8 @@ export declare class StepResolver {
     private childRunner;
     private monorepoRoot;
     constructor(childRunner: ChildCliRunner, monorepoRoot: string);
-    resolve(step: WiringStep, dryRun: boolean): StepExecutor;
+    resolve(step: WiringStep, dryRun: boolean, parallelBehavior?: 'failFast' | 'waitAll', signal?: AbortSignal): StepExecutor;
+    private buildExecutor;
     isBuiltin(uses: string): boolean;
     assertKnown(step: WiringStep): void;
 }
