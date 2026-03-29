@@ -213,7 +213,9 @@ errorPolicy:
       composedCliId: '@ark/test',
       monorepoRoot: tmpDir,
     })
-    await expect(runner.run([])).rejects.toThrow(/timed out|cancelled/i)
+    const result = await runner.run([])
+    expect(result.success).toBe(false)
+    expect(String(result.error)).toMatch(/timed out|cancelled/i)
   }, 5000)
 
   it('dag mode runs independent steps concurrently', async () => {
