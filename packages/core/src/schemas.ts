@@ -149,6 +149,14 @@ export const WiringFlagSchema = z.object({
   default: z.unknown().optional(),
 })
 
+export const StreamingConfigSchema = z.object({
+  until: ISO8601Schema.optional(),
+  stopOn: z.string().optional(),
+  restartOnFailure: z.boolean().default(false),
+})
+
+export type StreamingConfig = z.infer<typeof StreamingConfigSchema>
+
 export const WiringPlanSchema = z.object({
   apiVersion: z.literal('ark/v1'),
   kind: z.literal('WiringPlan'),
@@ -156,9 +164,17 @@ export const WiringPlanSchema = z.object({
   generatedAt: ISO8601Schema.optional(),
   approvedAt: ISO8601Schema.optional(),
   pipeline: z.object({
-    mode: z.enum(['sequential', 'dag']).default('sequential'),
+    // New canonical field
+    topology: z.enum(['sequential', 'dag']).optional(),
+    // Deprecated alias — still accepted, maps to topology in runtime
+    mode: z.enum(['sequential', 'dag']).optional(),
+    lifecycle: z.enum(['finite', 'streaming']).default('finite'),
     concurrency: z.number().int().positive().optional(),
-  }),
+  }).refine(
+    (p) => p.topology !== undefined || p.mode !== undefined,
+    { message: 'pipeline.topology (or deprecated pipeline.mode) is required' }
+  ),
+  streaming: StreamingConfigSchema.optional(),
   steps: z.array(WiringStepSchema),
   errorPolicy: ErrorPolicySchema.optional(),
   autoMode: z
