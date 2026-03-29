@@ -17,6 +17,8 @@ import { StepResolver } from './step-resolver.js'
 import { AutoModeOrchestrator } from './auto-mode-orchestrator.js'
 import { buildDag } from './dag.js'
 import { Scheduler } from './scheduler.js'
+import { Display } from './display.js'
+import type { StepTiming } from './display.js'
 
 export interface PipelineRunnerOptions {
   wiringPath: string
@@ -40,11 +42,13 @@ export class PipelineRunner {
   private plan: WiringPlan
   private resolver: StepResolver
   private orchestrator: AutoModeOrchestrator | undefined
+  private display: Display
 
   constructor(private options: PipelineRunnerOptions) {
     this.plan = this.loadPlan(options.wiringPath)
     const childRunner = new ChildCliRunner()
     this.resolver = new StepResolver(childRunner, options.monorepoRoot)
+    this.display = new Display()
   }
 
   async run(argv: string[]): Promise<RunResult> {
@@ -68,21 +72,42 @@ export class PipelineRunner {
       this.orchestrator = new AutoModeOrchestrator(bridge)
     }
 
-    process.stderr.write(
-      `[ark:runtime] Starting pipeline "${this.options.composedCliId}" ` +
-        `(mode=${mode}, dryRun=${dryRun}, runId=${ctx.meta.runId})\n`
-    )
+    const steps = this.plan.steps
+    this.display.pipelineStart({
+      runId: ctx.meta.runId,
+      mode: this.plan.pipeline.mode,
+      stepCount: steps.length,
+    })
+
+    // Pre-register all steps so the panel shows them from the start
+    const dag = this.plan.pipeline.mode === 'dag' ? buildDag(steps) : new Map(steps.map(s => [s.id, [] as string[]]))
+    for (const step of steps) {
+      this.display.registerStep(step.id, step.uses, dag.get(step.id) ?? [])
+    }
 
     if (this.plan.pipeline.mode === 'dag') {
-      return this.runDag(ctx)
+      return this.runDag(ctx, dag)
     }
 
-    const steps = this.plan.steps
-    for (const step of steps) {
-      await this.executeStep(step, ctx)
+    const wallStart = Date.now()
+    const timings: StepTiming[] = []
+    try {
+      for (const step of steps) {
+        await this.executeStep(step, ctx, undefined, timings)
+      }
+    } catch (err) {
+      this.display.pipelineFailed(Date.now() - wallStart, err instanceof Error ? err : new Error(String(err)))
+      return {
+        success: false,
+        stepOutputs: ctx.stepOutputs,
+        bindings: ctx.bindings,
+        error: err instanceof Error ? err.message : String(err),
+      }
     }
 
-    process.stderr.write(`[ark:runtime] Pipeline completed successfully.\n`)
+    const wallMs = Date.now() - wallStart
+    const sequentialMs = timings.reduce((sum, t) => sum + t.elapsedMs, 0)
+    this.display.pipelineDone(wallMs, timings, sequentialMs)
 
     return {
       success: true,
@@ -91,10 +116,11 @@ export class PipelineRunner {
     }
   }
 
-  private async runDag(ctx: PipelineContext): Promise<RunResult> {
-    const dag = buildDag(this.plan.steps)
+  private async runDag(ctx: PipelineContext, dag: Map<string, string[]>): Promise<RunResult> {
     const concurrency = this.plan.pipeline.concurrency ?? Infinity
     const parallelBehavior = this.plan.errorPolicy?.parallelBehavior ?? 'failFast'
+    const timings: StepTiming[] = []
+    const wallStart = Date.now()
 
     const scheduler = new Scheduler({
       dag,
@@ -102,19 +128,25 @@ export class PipelineRunner {
       parallelBehavior,
       runStep: async (id: string, signal: AbortSignal) => {
         const step = this.plan.steps.find(s => s.id === id)!
-        await this.executeStep(step, ctx, signal)
+        await this.executeStep(step, ctx, signal, timings, dag.get(id) ?? [])
       },
     })
 
     try {
       await scheduler.run()
-      process.stderr.write(`[ark:runtime] Pipeline completed successfully.\n`)
+      const wallMs = Date.now() - wallStart
+      const sequentialMs = timings.reduce((sum, t) => sum + t.elapsedMs, 0)
+      this.display.pipelineDone(wallMs, timings, sequentialMs)
       return {
         success: true,
         stepOutputs: ctx.stepOutputs,
         bindings: ctx.bindings,
       }
     } catch (err) {
+      this.display.pipelineFailed(
+        Date.now() - wallStart,
+        err instanceof Error ? err : new Error(String(err))
+      )
       return {
         success: false,
         stepOutputs: ctx.stepOutputs,
@@ -124,7 +156,13 @@ export class PipelineRunner {
     }
   }
 
-  private async executeStep(step: WiringStep, ctx: PipelineContext, signal?: AbortSignal): Promise<void> {
+  private async executeStep(
+    step: WiringStep,
+    ctx: PipelineContext,
+    signal?: AbortSignal,
+    timings?: StepTiming[],
+    deps: string[] = []
+  ): Promise<void> {
     // Auto-mode: fire AI decision before this step if configured
     if (ctx.mode === 'auto' && this.orchestrator?.shouldFireBefore(this.plan, step.id)) {
       await this.orchestrator.runDecision(this.plan, ctx)
@@ -135,12 +173,13 @@ export class PipelineRunner {
       const { interpolate } = await import('@ark/core')
       const condResult = interpolate(step.condition, ctx as unknown as Record<string, unknown>)
       if (!condResult) {
-        process.stderr.write(`[ark:runtime] Step "${step.id}" skipped (condition false).\n`)
+        this.display.stepSkipped(step.id)
         return
       }
     }
 
-    process.stderr.write(`[ark:runtime] Running step "${step.id}" (uses=${step.uses})...\n`)
+    this.display.stepStart(step.id, step.uses, deps)
+    const stepStart = Date.now()
 
     // Resolve inputs against current context
     const resolvedInputs = resolveInputs(
@@ -151,12 +190,26 @@ export class PipelineRunner {
     // Get executor and run
     const parallelBehavior = this.plan.errorPolicy?.parallelBehavior ?? 'failFast'
     const executor = this.resolver.resolve(step, ctx.dryRun, parallelBehavior, signal)
-    const result = await this.runWithRetry(step, executor, resolvedInputs, ctx)
+
+    let result: { output: Record<string, unknown>; skipped?: boolean }
+    try {
+      result = await this.runWithRetry(step, executor, resolvedInputs, ctx)
+    } catch (err) {
+      const elapsedMs = Date.now() - stepStart
+      this.display.stepFailed(step.id, err instanceof Error ? err : new Error(String(err)), elapsedMs)
+      timings?.push({ id: step.id, elapsedMs })
+      throw err
+    }
+
+    const elapsedMs = Date.now() - stepStart
 
     if (result.skipped) {
-      process.stderr.write(`[ark:runtime] Step "${step.id}" skipped (builtin conditional).\n`)
+      this.display.stepSkipped(step.id)
       return
     }
+
+    this.display.stepDone(step.id, elapsedMs)
+    timings?.push({ id: step.id, elapsedMs })
 
     // Store raw step output
     ;(ctx.stepOutputs as Record<string, unknown>)[step.id] = result.output
@@ -169,8 +222,6 @@ export class PipelineRunner {
         ctx as unknown as Record<string, unknown>
       )
     }
-
-    process.stderr.write(`[ark:runtime] Step "${step.id}" completed.\n`)
   }
 
   private async runWithRetry(
@@ -198,15 +249,11 @@ export class PipelineRunner {
           )
         }
         if (onFailure === 'continue') {
-          process.stderr.write(`[ark:runtime] Step "${step.id}" failed (continuing): ${String(err)}\n`)
           return { output: {} }
         }
         // retry
         if (attempt < maxAttempts) {
           const delay = backoffMs * attempt
-          process.stderr.write(
-            `[ark:runtime] Step "${step.id}" failed (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms...\n`
-          )
           await sleep(delay)
         }
       }
