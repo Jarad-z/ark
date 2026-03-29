@@ -231,17 +231,21 @@ export class PipelineRunner {
       })
     }
 
-    let proc = startSource()
-    let stopped = false
+    // Use an object so stop() always kills the *current* proc even after restarts
+    const state = { proc: startSource(), stopped: false, error: undefined as unknown }
 
     const stop = () => {
-      stopped = true
-      try { proc.kill('SIGTERM') } catch { /* already dead */ }
+      state.stopped = true
+      try { state.proc.kill('SIGTERM') } catch { /* already dead */ }
     }
 
-    const untilTimer = isFinite(untilMs)
-      ? setTimeout(stop, untilMs - Date.now())
+    const untilDelayMs = untilMs - Date.now()
+    const untilTimer = isFinite(untilMs) && untilDelayMs > 0
+      ? setTimeout(stop, untilDelayMs)
       : undefined
+
+    // If until is already elapsed, stop immediately
+    if (isFinite(untilMs) && untilDelayMs <= 0) stop()
 
     const sigTermHandler = () => stop()
     const sigIntHandler = () => stop()
@@ -261,7 +265,15 @@ export class PipelineRunner {
       }
 
       for (const step of downstreamSteps) {
-        if (!stopped) await this.executeStep(step, ctx, undefined, [])
+        if (!state.stopped) {
+          try {
+            await this.executeStep(step, ctx, undefined, [])
+          } catch (err) {
+            state.error = err
+            stop()
+            return
+          }
+        }
       }
 
       if (stopOn) {
@@ -273,16 +285,16 @@ export class PipelineRunner {
     const runUntilExit = (p: ReturnType<typeof spawn>): Promise<void> =>
       new Promise((res) => {
         const rl = createInterface({ input: p.stdout!, crlfDelay: Infinity })
-        rl.on('line', (line) => { processLine(line).catch(() => {}) })
+        rl.on('line', (line) => { processLine(line).catch((err) => { state.error = err; stop() }) })
         p.on('close', res)
       })
 
-    while (!stopped) {
-      await runUntilExit(proc)
-      if (stopped) break
+    while (!state.stopped) {
+      await runUntilExit(state.proc)
+      if (state.stopped) break
       if (restartOnFailure) {
         process.stderr.write('[ark:runtime] Source CLI exited, restarting...\n')
-        proc = startSource()
+        state.proc = startSource()
       } else {
         break
       }
@@ -293,6 +305,16 @@ export class PipelineRunner {
     process.off('SIGINT', sigIntHandler)
 
     process.stderr.write('[ark:runtime] Streaming pipeline stopped.\n')
+
+    if (state.error !== undefined) {
+      return {
+        success: false,
+        stepOutputs: ctx.stepOutputs,
+        bindings: ctx.bindings,
+        error: state.error instanceof Error ? state.error.message : String(state.error),
+      }
+    }
+
     return { success: true, stepOutputs: ctx.stepOutputs, bindings: ctx.bindings }
   }
 
